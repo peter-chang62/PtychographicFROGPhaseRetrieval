@@ -140,6 +140,8 @@ for it in range(maxiter):
 
         AT[:] += alpha * (ATshift.conj() / max(abs(ATshift) ** 2)) * (PsiPrime - Psi)
 
+        AT[:] += np.roll((AT.conj() / max(abs(AT) ** 2)) * (PsiPrime - Psi), -roll_pulse)
+
     err = calculate_error(AT, 400, pulse.T_ps * 1e3, spctgm)
     print(it, err)
     result.append(AT)
