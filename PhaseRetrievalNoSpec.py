@@ -4,10 +4,26 @@ import BBO as BBO
 import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.interpolate as spi
 import matplotlib.pyplot as plt
+from scipy.integrate import simps
 
 
 def normalize(vec):
     return vec / np.max(abs(vec))
+
+
+def threshold_operation(x, threshold):
+    return np.where(x < threshold, 0, x - threshold * np.sign(x))
+
+
+def calculate_spectrogram(AT, delay_window_fs, T_fs):
+    dT_fs = np.mean(np.diff(T_fs))
+    N = delay_window_fs / dT_fs
+    nrolls = np.arange(-N // 2, N // 2, 1).astype(int)
+    spectrogram = np.zeros((len(nrolls), len(AT))).astype(np.complex128)
+    for n, roll in enumerate(nrolls):
+        spectrogram[n][:] = np.roll(AT, roll) * AT
+    spectrogram = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(spectrogram, axes=1)), axes=1)
+    return abs(spectrogram) ** 2
 
 
 # %% Load the Data
@@ -49,26 +65,43 @@ E0 = pulse.AT
 
 # %% interpolate experimental spectrogram onto simulation grid
 gridded = spi.interp2d(nu_mks, T_fs_zoom, dataCorrected_zoom_T, kind='linear', fill_value=0.0)
-spectrogram = gridded(pulse.F_mks * 2.0, T_fs_zoom)
-
-# %% random delay ordering index for phase retrieval
-random_order_index = np.arange(len(T_fs_zoom) // 2)
-np.random.shuffle(random_order_index)
+spectrogram = normalize(gridded(pulse.F_mks * 2.0, T_fs_zoom))
 
 # %%
 scale = dT_fs / (pulse.dT_ps * 1e3)
 maxiter = 300
 spectrogram_fftshift = np.fft.ifftshift(spectrogram, axes=0)
 
+area_spectrogram_center = simps(spectrogram_fftshift[0])
+E0W2 = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(E0 ** 2)))
+area_E0W2 = simps(abs(E0W2) ** 2)
+E0 *= (area_spectrogram_center / area_E0W2) ** 0.25
+
 Ej = np.copy(E0)
 psi = np.zeros(Ej.shape, dtype=Ej.dtype)
 
-n = 0
-nrolls = round(n * scale)
-psi[:] = Ej * np.roll(E0, nrolls)
-Phi = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(psi)))
+rng = np.random.default_rng()
 
-phase = np.arctan2(Phi.imag, Phi.real)
-amp = np.roll(spectrogram_fftshift, n)[0]
-Phi = amp * np.exp(1j * phase)
-Phi = np.where(Phi < )
+for i in range(2):
+    random_order_index = np.arange(len(T_fs_zoom) // 2)
+    np.random.shuffle(random_order_index)
+    alpha = rng.uniform(low=0.1, high=0.5)
+
+    # inside the for loop
+    for n in random_order_index:
+        nrolls = round(n * scale)
+
+        Ejshifted = np.roll(E0, nrolls)
+        psi[:] = Ej * Ejshifted
+
+        Phi = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(psi)))
+        phase = np.arctan2(Phi.imag, Phi.real)
+        amp = np.sqrt(np.roll(spectrogram_fftshift, n, axis=0)[0])
+        Phi = amp * np.exp(1j * phase)
+        Phi = threshold_operation(Phi, 1e-4)
+
+        psi_prime = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(Phi)))
+
+        Ej += alpha * (Ejshifted.conj() / (max(abs(Ejshifted) ** 2))) * (psi_prime - psi)
+
+    print(i)
