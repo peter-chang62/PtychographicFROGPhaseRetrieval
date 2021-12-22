@@ -132,6 +132,11 @@ def scale_field_to_spctgm(AT, spctgm):
     return AT * scale_power
 
 
+def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
+    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm)
+    return gridded(F_mks_output, T_fs_output)
+
+
 # %% Load the Data
 DATA = np.genfromtxt("TestData/new_alignment_method.txt")
 
@@ -165,17 +170,20 @@ dataCorrected[:, ind500nm] /= R[ind500nm]
 pulse = fpn.Pulse(T0_ps=0.02,
                   center_wavelength_nm=1560,
                   time_window_ps=10,
-                  NPTS=2 ** 14)
+                  NPTS=2 ** 12)
 
 # %% interpolate experimental data onto the simulation grid
-gridded = spi.interp2d(F_mks, T_fs, dataCorrected)
-spctgm = gridded(pulse.F_mks * 2, T_fs)
+spctgm = interpolate_spctgm_to_grid(F_mks_input=F_mks,
+                                    F_mks_output=pulse.F_mks,
+                                    T_fs_input=T_fs,
+                                    T_fs_output=T_fs,
+                                    spctgm=dataCorrected)
 
 # %% fftshifted spectrogram
 spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
 
 # %% if the spectrogram is to be replicated,
 # the power needs to match, so scale the pulse field accordingly
-AT = scale_field_to_spctgm(pulse.AT, spctgm)
+pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
 # %% phase retrieval
