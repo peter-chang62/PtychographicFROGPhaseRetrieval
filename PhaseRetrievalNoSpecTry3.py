@@ -4,7 +4,6 @@ import BBO as BBO
 import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.interpolate as spi
 from scipy.integrate import simps
-import pypret as pyp
 import matplotlib.pyplot as plt
 
 
