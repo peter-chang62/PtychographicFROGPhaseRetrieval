@@ -15,15 +15,6 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def threshold_operation(x, threshold):
-    """
-    threshold operation from paper, quite close to just setting whatever is below a certain threshold in a numpy
-    array to zero
-    """
-
-    return np.where(x < threshold, 0, x - threshold * np.sign(x))
-
-
 def shift1D(AT, dT_fs, pulse_ref):
     """
     :param AT: complex 1D array, electric field in time domain
@@ -174,26 +165,24 @@ pulse = fpn.Pulse(T0_ps=0.02,
 
 # %% interpolate experimental data onto the simulation grid
 spctgm = interpolate_spctgm_to_grid(F_mks_input=F_mks,
-                                    F_mks_output=pulse.F_mks,
+                                    F_mks_output=pulse.F_mks * 2,
                                     T_fs_input=T_fs,
                                     T_fs_output=T_fs,
                                     spctgm=dataCorrected)
-
-# %% fftshifted spectrogram
-spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
 
 # %% if the spectrogram is to be replicated,
 # the power needs to match, so scale the pulse field accordingly
 pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
 # %% phase retrieval
-
 maxiter = 300
 rng = np.random.default_rng()
-end_time = 200.  # fs
+end_time = T_fs[-1]  # end time for retrieval time axis in fs
 ind_end_time = np.argmin((T_fs - end_time) ** 2)
-ind_start_time = np.argmin(T_fs ** 2)
-delay_time = np.zeros(ind_end_time - ind_start_time)
+ind_start_time = np.argmin(T_fs ** 2)  # start at 0 fs
+delay_time = T_fs[ind_start_time:ind_end_time]
+time_order = zip(delay_time, np.arange(ind_start_time, ind_end_time))
+time_order = np.array([*time_order])
 
 E_j = np.copy(pulse.AT)
 Eshift_j = np.zeros(E_j.shape, dtype=E_j.dtype)
@@ -205,27 +194,28 @@ phi_j = np.zeros(E_j.shape, dtype=E_j.dtype)
 phase = np.zeros(E_j.shape)
 amp = np.zeros(E_j.shape)
 error = np.zeros(maxiter)
+Output = np.zeros((maxiter, len(E_j)), dtype=E_j.dtype)
 
 print("initital error:", calculate_error(E_j,
                                          T_fs[ind_start_time:ind_end_time],
                                          pulse,
                                          spctgm[ind_start_time:ind_end_time]))
 
+fig, (ax1, ax2) = plt.subplots(1, 2)
+
 for i in range(maxiter):
-    delay_time[:] = T_fs[ind_start_time:ind_end_time]
-    rng.shuffle(delay_time)
+    rng.shuffle(time_order, axis=0)
 
     alpha = rng.uniform(low=0.1, high=0.5)
 
-    for j, dt in enumerate(delay_time):
+    for dt, j in time_order:
         Eshift_j[:] = shift1D(E_j, dt, pulse)
         psi_j[:] = E_j * Eshift_j
 
         phi_j[:] = fft(psi_j)
         phase[:] = np.arctan2(phi_j.imag, phi_j.real)
-        amp[:] = np.sqrt(spctgm_fftshift[j])
+        amp[:] = np.sqrt(spctgm[int(j)])
         phi_j[:] = amp * np.exp(1j * phase)
-        phi_j[:] = threshold_operation(phi_j, 2e-6)
 
         psiPrime_j[:] = ifft(phi_j)
 
@@ -240,3 +230,11 @@ for i in range(maxiter):
                                pulse,
                                spctgm[ind_start_time:ind_end_time])
     print(i, error[i])
+    Output[i] = E_j
+
+    ax1.clear()
+    ax2.clear()
+    ax1.plot(pulse.T_ps, abs(E_j) ** 2)
+    ax2.plot(pulse.F_THz, abs(fft(E_j)) ** 2)
+    fig.suptitle("iteration " + str(i) + "; error: " + '%.3f' % error[i])
+    plt.pause(.001)
