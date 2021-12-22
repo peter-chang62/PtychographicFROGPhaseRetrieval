@@ -5,6 +5,9 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.interpolate as spi
 from scipy.integrate import simps
 import matplotlib.pyplot as plt
+import clipboard_and_style_sheet
+
+clipboard_and_style_sheet.style_sheet()
 
 
 def normalize(vec):
@@ -260,4 +263,8 @@ ax[1, 1].set_xlabel("$\mathrm{\mu m}$")
 ax[1, 1].set_ylabel("T (fs)")
 ax[1, 1].set_title("Retrieved")
 ax[1, 1].set_xlim(1, 2)
+
+# %% save results
 plt.savefig("spectrogram.png")
+to_save = np.hstack((pulse.T_ps[:, np.newaxis], AT_out.real[:, np.newaxis], AT_out.imag[:, np.newaxis]))
+np.savetxt("AT_T_ps_real_imag.txt", to_save)
