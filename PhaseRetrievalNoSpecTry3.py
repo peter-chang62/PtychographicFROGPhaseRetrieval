@@ -187,3 +187,56 @@ spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
 pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
 # %% phase retrieval
+
+maxiter = 300
+rng = np.random.default_rng()
+end_time = 200.  # fs
+ind_end_time = np.argmin((T_fs - end_time) ** 2)
+ind_start_time = np.argmin(T_fs ** 2)
+delay_time = np.zeros(ind_end_time - ind_start_time)
+
+E_j = np.copy(pulse.AT)
+Eshift_j = np.zeros(E_j.shape, dtype=E_j.dtype)
+corr1 = np.zeros(E_j.shape, dtype=E_j.dtype)
+corr2 = np.zeros(E_j.shape, dtype=E_j.dtype)
+psi_j = np.zeros(E_j.shape, dtype=E_j.dtype)
+psiPrime_j = np.zeros(E_j.shape, dtype=E_j.dtype)
+phi_j = np.zeros(E_j.shape, dtype=E_j.dtype)
+phase = np.zeros(E_j.shape)
+amp = np.zeros(E_j.shape)
+error = np.zeros(maxiter)
+
+print("initital error:", calculate_error(E_j,
+                                         T_fs[ind_start_time:ind_end_time],
+                                         pulse,
+                                         spctgm[ind_start_time:ind_end_time]))
+
+for i in range(maxiter):
+    delay_time[:] = T_fs[ind_start_time:ind_end_time]
+    rng.shuffle(delay_time)
+
+    alpha = rng.uniform(low=0.1, high=0.5)
+
+    for j, dt in enumerate(delay_time):
+        Eshift_j[:] = shift1D(E_j, dt, pulse)
+        psi_j[:] = E_j * Eshift_j
+
+        phi_j[:] = fft(psi_j)
+        phase[:] = np.arctan2(phi_j.imag, phi_j.real)
+        amp[:] = np.sqrt(spctgm_fftshift[j])
+        phi_j[:] = amp * np.exp(1j * phase)
+        phi_j[:] = threshold_operation(phi_j, 2e-6)
+
+        psiPrime_j[:] = ifft(phi_j)
+
+        corr1[:] = alpha * Eshift_j.conj() * (psiPrime_j - psi_j) / max(abs(Eshift_j) ** 2)
+        corr2[:] = alpha * E_j.conj() * (psiPrime_j - psi_j) / max(abs(E_j) ** 2)
+        corr2[:] = shift1D(corr2, -dt, pulse)
+
+        E_j[:] += corr1 + corr2
+
+    error[i] = calculate_error(E_j,
+                               T_fs[ind_start_time:ind_end_time],
+                               pulse,
+                               spctgm[ind_start_time:ind_end_time])
+    print(i, error[i])
