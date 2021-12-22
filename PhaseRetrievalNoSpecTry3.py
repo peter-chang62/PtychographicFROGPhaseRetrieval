@@ -173,8 +173,8 @@ spctgm = interpolate_spctgm_to_grid(F_mks_input=F_mks,
 # the power needs to match, so scale the pulse field accordingly
 pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
-# %% phase retrieval
-maxiter = 300
+# %% set up phase retrieval
+maxiter = 150
 rng = np.random.default_rng()
 end_time = T_fs[-1]  # end time for retrieval time axis in fs
 ind_end_time = np.argmin((T_fs - end_time) ** 2)
@@ -193,8 +193,9 @@ phi_j = np.zeros(E_j.shape, dtype=E_j.dtype)
 phase = np.zeros(E_j.shape)
 amp = np.zeros(E_j.shape)
 error = np.zeros(maxiter)
-Output = np.zeros((maxiter, len(E_j)), dtype=E_j.dtype)
+Output_Ej = np.zeros((maxiter, len(E_j)), dtype=E_j.dtype)
 
+# %% phase retrieval
 print("initital error:", calculate_error(E_j,
                                          T_fs[ind_start_time:ind_end_time],
                                          pulse,
@@ -229,7 +230,7 @@ for i in range(maxiter):
                                pulse,
                                spctgm[ind_start_time:ind_end_time])
     print(i, error[i])
-    Output[i] = E_j
+    Output_Ej[i] = E_j
 
     ax1.clear()
     ax2.clear()
@@ -237,3 +238,23 @@ for i in range(maxiter):
     ax2.plot(pulse.F_THz, abs(fft(E_j)) ** 2)
     fig.suptitle("iteration " + str(i) + "; error: " + '%.3f' % error[i])
     plt.pause(.001)
+
+# %% phase retreival results
+
+ind_ret = np.argmin(error)
+AT_out = Output_Ej[ind_ret]
+ind_wl = (pulse.wl_um > 0).nonzero()
+
+fig, ax = plt.subplots(2, 2)
+ax[0, 0].plot(pulse.T_ps, normalize(abs(AT_out) ** 2))
+ax[0, 0].set_xlabel("T (ps)")
+ax[0, 1].plot(pulse.wl_um[ind_wl], normalize(abs(fft(AT_out[ind_wl])) ** 2))
+ax[0, 1].set_xlabel("$\mathrm{\mu m}$")
+ax[1, 0].pcolormesh(pulse.wl_um, T_fs, spctgm, cmap='nipy_spectral')
+ax[1, 0].set_xlabel("$\mathrm{\mu m}$")
+ax[1, 0].set_ylabel("T (fs)")
+ax[1, 0].set_title("Experimental")
+ax[1, 1].pcolormesh(pulse.wl_um, T_fs, calculate_spctgm(AT_out, T_fs, pulse), cmap='nipy_spectral')
+ax[1, 1].set_xlabel("$\mathrm{\mu m}$")
+ax[1, 1].set_ylabel("T (fs)")
+ax[1, 1].set_title("Retrieved")
