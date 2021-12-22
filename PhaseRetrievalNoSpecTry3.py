@@ -158,7 +158,7 @@ dataCorrected[:, ind500nm] /= R[ind500nm]
 
 # %% initial guess and set the simulation grid
 pulse = fpn.Pulse(T0_ps=0.02,
-                  center_wavelength_nm=1560,
+                  center_wavelength_nm=1560.0,
                   time_window_ps=10,
                   NPTS=2 ** 12)
 
@@ -174,7 +174,7 @@ spctgm = interpolate_spctgm_to_grid(F_mks_input=F_mks,
 pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
 # %% set up phase retrieval
-maxiter = 150
+maxiter = 100
 rng = np.random.default_rng()
 end_time = T_fs[-1]  # end time for retrieval time axis in fs
 ind_end_time = np.argmin((T_fs - end_time) ** 2)
@@ -240,21 +240,24 @@ for i in range(maxiter):
     plt.pause(.001)
 
 # %% phase retreival results
-
 ind_ret = np.argmin(error)
 AT_out = Output_Ej[ind_ret]
 ind_wl = (pulse.wl_um > 0).nonzero()
 
-fig, ax = plt.subplots(2, 2)
+fig, ax = plt.subplots(2, 2, figsize=[12.8, 8.08])
 ax[0, 0].plot(pulse.T_ps, normalize(abs(AT_out) ** 2))
 ax[0, 0].set_xlabel("T (ps)")
 ax[0, 1].plot(pulse.wl_um[ind_wl], normalize(abs(fft(AT_out[ind_wl])) ** 2))
 ax[0, 1].set_xlabel("$\mathrm{\mu m}$")
+ax[0, 1].set_xlim(1, 2)
 ax[1, 0].pcolormesh(pulse.wl_um, T_fs, spctgm, cmap='nipy_spectral')
 ax[1, 0].set_xlabel("$\mathrm{\mu m}$")
 ax[1, 0].set_ylabel("T (fs)")
 ax[1, 0].set_title("Experimental")
+ax[1, 0].set_xlim(1, 2)
 ax[1, 1].pcolormesh(pulse.wl_um, T_fs, calculate_spctgm(AT_out, T_fs, pulse), cmap='nipy_spectral')
 ax[1, 1].set_xlabel("$\mathrm{\mu m}$")
 ax[1, 1].set_ylabel("T (fs)")
 ax[1, 1].set_title("Retrieved")
+ax[1, 1].set_xlim(1, 2)
+plt.savefig("spectrogram.png")
