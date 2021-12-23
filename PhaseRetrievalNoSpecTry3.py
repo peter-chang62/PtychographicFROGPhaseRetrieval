@@ -205,6 +205,7 @@ print("initital error:", calculate_error(E_j,
                                          spctgm[ind_start_time:ind_end_time]))
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
+ind_wl = (pulse.wl_um > 0).nonzero()
 
 for i in range(maxiter):
     rng.shuffle(time_order, axis=0)
@@ -238,14 +239,14 @@ for i in range(maxiter):
     ax1.clear()
     ax2.clear()
     ax1.plot(pulse.T_ps, abs(E_j) ** 2)
-    ax2.plot(pulse.F_THz, abs(fft(E_j)) ** 2)
+    ax2.plot(pulse.wl_um[ind_wl], abs(fft(E_j[ind_wl])) ** 2)
+    ax2.set_xlim(1, 2)
     fig.suptitle("iteration " + str(i) + "; error: " + '%.3f' % error[i])
     plt.pause(.001)
 
 # %% phase retreival results
 ind_ret = np.argmin(error)
 AT_out = Output_Ej[ind_ret]
-ind_wl = (pulse.wl_um > 0).nonzero()
 
 fig, ax = plt.subplots(2, 2, figsize=[12.8, 8.08])
 ax[0, 0].plot(pulse.T_ps, normalize(abs(AT_out) ** 2))
