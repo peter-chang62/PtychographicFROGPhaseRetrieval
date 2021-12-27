@@ -1,3 +1,4 @@
+import gc
 import numpy as np
 import scipy.constants as sc
 import BBO as BBO
@@ -18,97 +19,55 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def shift1D(AT, dT_fs, pulse_ref):
-    """
-    :param AT: complex 1D array, electric field in time domain
-    :param dT_fs: float, time shift in femtoseconds
-    :param pulse_ref: reference pulse for the frequency axis
-    :return: shifted electric field in time domain
-    """
-
+def shift1D(AT, AW, dT_fs, pulse_ref):
     pulse_ref: fpn.Pulse
-    AW = fft(AT)
 
-    dT_ps = dT_fs * 1e-3
-    AW *= np.exp(1j * pulse_ref.V_THz * dT_ps)
-    return ifft(AW)
+    AW[:] *= np.exp(1j * pulse_ref.V_THz[:] * dT_fs[:] * 1e-3)
+    ifft(AT, AW)
 
 
-def shift2D(AT2D, dT_fs_vec, pulse_ref):
-    """
-    :param AT2D: complex 2D array, electric fields in time domain are row indexed
-    :param dT_fs_vec: 1D numpy array, time shift in femtoseconds for each E-field (row) in AT2D
-    :param pulse_ref: reference pulse for the frequency axis
-    :return: shifted AT2D, each E-field (row) has been shifted by amounts specified in dT_fs_vec
-    """
-
+def shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
     pulse_ref: fpn.Pulse
-    AW2D = fft(AT2D, axis=1)
-    dT_ps_vec = dT_fs_vec * 1e-3
 
-    phase = np.zeros(AW2D.shape, dtype=np.complex128)
-    phase[:] = pulse_ref.V_THz
-    phase *= 1j * dT_ps_vec[:, np.newaxis]
-    phase = np.exp(phase)
+    phase2D[:] = pulse_ref.V_THz[:]
+    phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
+    phase2D[:] = np.exp(phase2D[:])
 
-    AW2D *= phase
-    return ifft(AW2D, axis=1)
+    AW2D_to_shift[:] *= phase2D[:]
+    ifft(AT2D_to_shift, AW2D_to_shift, axis=1)
 
 
-def calculate_spctgm(AT, dT_fs_vec, pulse_ref):
-    """
-    :param AT: 1D complex array, electric-field in time domain
-    :param dT_fs_vec: delay time axis in femtoseconds
-    :param pulse_ref: reference pulse for frequency axis
-    :return: calculated spectrogram, time delay is row indexed, and frequency is column indexed
-    """
+def calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref):
+    shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref)
 
-    AT2D = np.zeros((len(dT_fs_vec), len(AT)), dtype=np.complex128)
-    AT2D[:] = AT
-    AT2D_shift = shift2D(AT2D, dT_fs_vec, pulse_ref)
-
-    spectrogram = AT2D * AT2D_shift
-    spectrogram = abs(fft(spectrogram, axis=1)) ** 2
-    return spectrogram
+    spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
+    fft(spctgm_to_calc_Tdomain, spctgm_to_calc_Wdomain, axis=1)
+    spctgm_to_calc_Wdomain[:] **= 2.
 
 
-def calculate_error(AT, dT_fs_vec, pulse_ref, spctgm_ref):
-    """
-    :param AT: 1D complex array, electric-field in time domain
-    :param dT_fs_vec: 1D array, delay time axis in femtoseconds
-    :param pulse_ref: reference pulse for frequency domain
-    :param spctgm_ref: reference spectrogram to compare with the calculated spectrogram
-    :return: float, error
-    """
+def calculate_error(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                    spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref, spctgm_ref):
+    calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref)
 
-    calc_spctgm = calculate_spctgm(AT, dT_fs_vec, pulse_ref)
-    num = np.sqrt(np.sum((calc_spctgm - spctgm_ref) ** 2))
-    denom = np.sqrt(np.sum(abs(spctgm_ref) ** 2))
+    num = np.sqrt(np.sum((spctgm_to_calc_Wdomain - spctgm_ref) ** 2))
+    denom = np.sqrt(np.sum(spctgm_ref ** 2))
     return num / denom
 
 
-def fft(x, axis=None):
-    """
-    calculates the 1D fft of the numpy array x
-    if x is not 1D you need to specify the axis
-    """
-
+def fft(x, xw, axis=None):
     if axis is None:
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
+        xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
     else:
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+        xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
 
 
-def ifft(x, axis=None):
-    """
-    calculates the 1D ifft of the numpy array x
-    if x is not 1D you need to specify the axis
-    """
-
+def ifft(x, xw, axis=None):
     if axis is None:
-        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x)))
+        x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw)))
     else:
-        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+        x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw, axes=axis), axis=axis), axes=axis)
 
 
 def scale_field_to_spctgm(AT, spctgm):
@@ -118,7 +77,8 @@ def scale_field_to_spctgm(AT, spctgm):
     :return: 1D complex arrray, AT scaled to the correct power for the reference spectrogram
     """
 
-    AW2 = fft(AT ** 2)
+    AW2 = np.zeros(AT.shape, AT.dtype)
+    fft(AT ** 2, AW2)
     power_AW2 = simps(abs(AW2) ** 2)
     spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
     power_spctgm = simps(spctgm_fftshift[0])
@@ -132,16 +92,33 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
 
 
 class Retrieval:
-    def __init__(self):
+    def __init__(self, maxiter=100):
         self._exp_T_fs = None
         self._exp_wl_nm = None
         self._data = None
         self._interp_data = None
+        self.maxiter = maxiter
+
+        self.corrected_for_phase_matching = False
 
         self.pulse = fpn.Pulse(T0_ps=0.02,
                                center_wavelength_nm=1560.0,
                                time_window_ps=10,
                                NPTS=2 ** 12)
+
+        self.E_j = np.zeros(self.pulse.AT.shape, dtype=self.pulse.AT.dtype)
+        self.Eshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.corr1 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.corr2 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.psi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.psiPrime_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.phi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.phase = np.zeros(self.E_j.shape)
+        self.amp = np.zeros(self.E_j.shape)
+        self.error = np.zeros(maxiter)
+        self.Output_Ej = np.zeros((maxiter, len(self.E_j)), dtype=self.E_j.dtype)
+
+        self._rng = np.random.default_rng()
 
     def load_data(self, path_to_data):
         data = np.genfromtxt(path_to_data)
@@ -152,6 +129,13 @@ class Retrieval:
         # center T0
         ind_max = np.unravel_index(np.argmax(data), data.shape)[0]
         self._data = np.roll(data, -(ind_max - len(data) // 2), axis=0)
+
+        # reset certain variables: have not yet corrected for phase matching
+        # make sure to re-interpolate the data to the sim grid
+        self.corrected_for_phase_matching = False
+        del self._interp_data
+        gc.collect()
+        self._interp_data = None
 
     def interpolate_data_to_sim_grid(self):
         self._interp_data = interpolate_spctgm_to_grid(F_mks_input=self.exp_F_mks,
@@ -200,5 +184,44 @@ class Retrieval:
         ind = (self.exp_wl_nm > 500).nonzero()[0]
         self.data[:, ind] /= R[ind]
 
-    def scale_initial_pwr_to_spctgm(self):
+        self.corrected_for_phase_matching = True
+
+    def scale_initial_pwr_to_spctgm(self, corr_for_pm=True,
+                                    start_time=None,
+                                    end_time=None):
+
+        if corr_for_pm:
+            # make sure to correct for phase matcing
+            if not self.corrected_for_phase_matching:
+                self.correct_for_phase_match()
+
+        # make sure to have interpolated the data to the simulation grid
+        if self._interp_data is None:
+            self.interpolate_data_to_sim_grid()
+
+        # scale the pulse power to correspond to the spectrogram (very important!)
         self.pulse.set_AT(scale_field_to_spctgm(self.pulse.AT, self.interp_data))
+
+        if start_time is None:
+            start_time = 0.0
+        if end_time is None:
+            end_time = self.exp_T_fs[-1]
+
+        ind_start = np.argmin((self.exp_T_fs - start_time) ** 2)
+        ind_end = np.argmin((self.exp_T_fs - end_time) ** 2)
+
+        delay_time = self.exp_T_fs[ind_start:ind_end]
+        time_order = np.array([*zip(delay_time, np.arange(ind_start, ind_end))])
+
+        self.E_j[:] = self.pulse.AT[:]
+        # print("initial error:", calculate_error(self.E_j,
+        #                                         delay_time,
+        #                                         self.pulse,
+        #                                         self.interp_data[ind_start:ind_end]))
+        # fig, (ax1, ax2) = plt.subplots(1, 2)
+        # ind_wl = (self.pulse.wl_um > 0).nonzero()[0]
+        # for i in range(self.maxiter):
+        #     self._rng.shuffle(time_order, axis=0)
+        #     alpha = self._rng.uniform(low=0.1, high=0.5)
+        #     for dt, j in time_order:
+        #         pass
