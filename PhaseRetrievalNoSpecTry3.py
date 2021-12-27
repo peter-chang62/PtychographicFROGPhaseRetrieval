@@ -140,13 +140,12 @@ data = DATA[:, 1:][1:]
 
 # %% useful variables
 F_mks = sc.c / (wl_nm * 1e-9)
-dT_fs = np.mean(np.diff(T_fs))
 
 # %% center T0
 ind_max = np.unravel_index(np.argmax(data), data.shape)[0]
 data = np.roll(data, -(ind_max - len(data) // 2), axis=0)
 
-# %% phasematching
+# %% phase matching
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_um=wl_nm * 1e-3 * 2,  # fundamental wavelength
           length_um=50.,  # crystal thickness
@@ -154,7 +153,7 @@ R = bbo.R(wl_um=wl_nm * 1e-3 * 2,  # fundamental wavelength
           alpha_rad=np.arctan(.25 / 2)
           )
 
-# %% correct for phasematching
+# %% correct for phase matching
 ind500nm = (wl_nm > 500).nonzero()[0]
 dataCorrected = np.copy(data)
 dataCorrected[:, ind500nm] /= R[ind500nm]
@@ -244,7 +243,7 @@ for i in range(maxiter):
     fig.suptitle("iteration " + str(i) + "; error: " + '%.3f' % error[i])
     plt.pause(.001)
 
-# %% phase retreival results
+# %% plot phase retrieval results
 ind_ret = np.argmin(error)
 AT_out = Output_Ej[ind_ret]
 
@@ -266,6 +265,6 @@ ax[1, 1].set_title("Retrieved")
 ax[1, 1].set_xlim(1, 2)
 
 # %% save results
-plt.savefig("spectrogram.png")
-to_save = np.hstack((pulse.T_ps[:, np.newaxis], AT_out.real[:, np.newaxis], AT_out.imag[:, np.newaxis]))
-np.savetxt("AT_T_ps_real_imag.txt", to_save)
+# plt.savefig("spectrogram.png")
+# to_save = np.hstack((pulse.T_ps[:, np.newaxis], AT_out.real[:, np.newaxis], AT_out.imag[:, np.newaxis]))
+# np.savetxt("AT_T_ps_real_imag.txt", to_save)
