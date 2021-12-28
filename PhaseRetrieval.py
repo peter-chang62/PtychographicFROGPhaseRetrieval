@@ -6,6 +6,7 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.interpolate as spi
 from scipy.integrate import simps
 import matplotlib.pyplot as plt
+import pyfftw
 import PullDataFromOSA as osa
 import clipboard_and_style_sheet
 
@@ -17,73 +18,6 @@ def normalize(vec):
     normalize a numpy array
     """
     return vec / np.max(abs(vec))
-
-
-def shift1D(AT_to_shift, AW, AW_to_shift, dT_fs, pulse_ref):
-    pulse_ref: fpn.Pulse
-
-    AW_to_shift[:] = AW[:] * np.exp(1j * pulse_ref.V_THz[:] * dT_fs * 1e-3)
-    ifft(AT_to_shift, AW_to_shift)
-
-
-def shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
-    pulse_ref: fpn.Pulse
-
-    phase2D[:] = pulse_ref.V_THz[:]
-    phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
-    phase2D[:] = np.exp(phase2D[:])
-
-    AW2D_to_shift[:] *= phase2D[:]
-    ifft(AT2D_to_shift, AW2D_to_shift, axis=1)
-
-
-def calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref):
-    shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref)
-
-    spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
-    fft(spctgm_to_calc_Tdomain, spctgm_to_calc_Wdomain, axis=1)
-    spctgm_to_calc_Wdomain[:] *= spctgm_to_calc_Wdomain.conj()
-
-
-def calculate_error(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                    spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref, spctgm_ref):
-    calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref)
-
-    num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real - spctgm_ref) ** 2))
-    denom = np.sqrt(np.sum(spctgm_ref ** 2))
-    return num / denom
-
-
-def fft(x, xw, axis=None):
-    if axis is None:
-        xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
-    else:
-        xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
-
-
-def ifft(x, xw, axis=None):
-    if axis is None:
-        x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw)))
-    else:
-        x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw, axes=axis), axis=axis), axes=axis)
-
-
-def scale_field_to_spctgm(AT, spctgm):
-    """
-    :param AT: 1D complex array, electric-field in time domain
-    :param spctgm: reference spectrogram
-    :return: 1D complex arrray, AT scaled to the correct power for the reference spectrogram
-    """
-
-    AW2 = np.zeros(AT.shape, AT.dtype)
-    fft(AT ** 2, AW2)
-    power_AW2 = simps(abs(AW2) ** 2)
-    spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
-    power_spctgm = simps(spctgm_fftshift[0])
-    scale_power = (power_spctgm / power_AW2) ** 0.25
-    return AT * scale_power
 
 
 def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
@@ -107,6 +41,66 @@ class Retrieval:
                                NPTS=2 ** 12)
 
         self._rng = np.random.default_rng()
+
+    def shift1D(self, AT_to_shift, AW, AW_to_shift, dT_fs, pulse_ref):
+        pulse_ref: fpn.Pulse
+
+        AW_to_shift[:] = AW[:] * np.exp(1j * pulse_ref.V_THz[:] * dT_fs * 1e-3)
+        self.ifft(AT_to_shift, AW_to_shift)
+
+    def shift2D(self, AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
+        pulse_ref: fpn.Pulse
+
+        phase2D[:] = pulse_ref.V_THz[:]
+        phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
+        phase2D[:] = np.exp(phase2D[:])
+
+        AW2D_to_shift[:] *= phase2D[:]
+        self.ifft(AT2D_to_shift, AW2D_to_shift, axis=1)
+
+    def calculate_spctgm(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                         spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref):
+        self.shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref)
+
+        spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
+        self.fft(spctgm_to_calc_Tdomain, spctgm_to_calc_Wdomain, axis=1)
+        spctgm_to_calc_Wdomain[:] *= spctgm_to_calc_Wdomain.conj()
+
+    def calculate_error(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                        spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref, spctgm_ref):
+        self.calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+                              spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref)
+
+        num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real - spctgm_ref) ** 2))
+        denom = np.sqrt(np.sum(spctgm_ref ** 2))
+        return num / denom
+
+    def fft(self, x, xw, axis=None):
+        if axis is None:
+            xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
+        else:
+            xw[:] = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+
+    def ifft(self, x, xw, axis=None):
+        if axis is None:
+            x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw)))
+        else:
+            x[:] = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(xw, axes=axis), axis=axis), axes=axis)
+
+    def scale_field_to_spctgm(self, AT, spctgm):
+        """
+        :param AT: 1D complex array, electric-field in time domain
+        :param spctgm: reference spectrogram
+        :return: 1D complex arrray, AT scaled to the correct power for the reference spectrogram
+        """
+
+        AW2 = np.zeros(AT.shape, AT.dtype)
+        self.fft(AT ** 2, AW2)
+        power_AW2 = simps(abs(AW2) ** 2)
+        spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
+        power_spctgm = simps(spctgm_fftshift[0])
+        scale_power = (power_spctgm / power_AW2) ** 0.25
+        return AT * scale_power
 
     def load_data(self, path_to_data):
         data = np.genfromtxt(path_to_data)
@@ -217,7 +211,7 @@ class Retrieval:
             self.interpolate_data_to_sim_grid()
 
         # scale the pulse power to correspond to the spectrogram (very important!)
-        self.pulse.set_AT(scale_field_to_spctgm(self.pulse.AT, self.interp_data))
+        self.pulse.set_AT(self.scale_field_to_spctgm(self.pulse.AT, self.interp_data))
 
         if start_time is None:
             start_time = 0.0
@@ -233,20 +227,20 @@ class Retrieval:
         self.setup_retrieval_arrays(self.delay_time)  # initializes arrays to zeros
 
         self.E_j[:] = self.pulse.AT[:]
-        fft(self.E_j, self.EW_j)  # set EW_j
+        self.fft(self.E_j, self.EW_j)  # set EW_j
         self.AT2D[:] = self.E_j[:]
         self.AT2D_to_shift[:] = self.E_j[:]
         self.AW2D_to_shift[:] = self.EW_j[:]
 
-        error = calculate_error(self.AT2D,
-                                self.AT2D_to_shift,
-                                self.AW2D_to_shift,
-                                self.spctgm_to_calc_Tdomain,
-                                self.spctgm_to_calc_Wdomain,
-                                self.phase2D,
-                                self.delay_time,
-                                self.pulse,
-                                self.interp_data[ind_start:ind_end])
+        error = self.calculate_error(self.AT2D,
+                                     self.AT2D_to_shift,
+                                     self.AW2D_to_shift,
+                                     self.spctgm_to_calc_Tdomain,
+                                     self.spctgm_to_calc_Wdomain,
+                                     self.phase2D,
+                                     self.delay_time,
+                                     self.pulse,
+                                     self.interp_data[ind_start:ind_end])
 
         print("initial error:", error)
 
@@ -259,37 +253,37 @@ class Retrieval:
             alpha = self._rng.uniform(low=0.1, high=0.5)
 
             for dt, j in time_order:
-                shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, self.pulse)
+                self.shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, self.pulse)
                 self.psi_j[:] = self.E_j[:] * self.Eshift_j[:]
 
-                fft(self.psi_j, self.phi_j)
+                self.fft(self.psi_j, self.phi_j)
                 self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
                 self.amp[:] = np.sqrt(self.interp_data[int(j)])
                 self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
-                ifft(self.psiPrime_j, self.phi_j)
+                self.ifft(self.psiPrime_j, self.phi_j)
 
                 self.corr1[:] = alpha * self.Eshift_j.conj() * \
                                 (self.psiPrime_j[:] - self.psi_j[:]) / max(abs(self.Eshift_j) ** 2)
                 self.corr2[:] = alpha * self.E_j.conj() * \
                                 (self.psiPrime_j[:] - self.psi_j[:]) / max(abs(self.E_j) ** 2)
-                fft(self.corr2, self.corr2W)
-                shift1D(self.corr2, self.corr2W, self.corr2W, -dt, self.pulse)
+                self.fft(self.corr2, self.corr2W)
+                self.shift1D(self.corr2, self.corr2W, self.corr2W, -dt, self.pulse)
 
                 self.E_j[:] += self.corr1 + self.corr2
-                fft(self.E_j, self.EW_j)
+                self.fft(self.E_j, self.EW_j)
 
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
-            error = calculate_error(self.AT2D,
-                                    self.AT2D_to_shift,
-                                    self.AW2D_to_shift,
-                                    self.spctgm_to_calc_Tdomain,
-                                    self.spctgm_to_calc_Wdomain,
-                                    self.phase2D,
-                                    self.delay_time,
-                                    self.pulse,
-                                    self.interp_data[ind_start:ind_end])
+            error = self.calculate_error(self.AT2D,
+                                         self.AT2D_to_shift,
+                                         self.AW2D_to_shift,
+                                         self.spctgm_to_calc_Tdomain,
+                                         self.spctgm_to_calc_Wdomain,
+                                         self.phase2D,
+                                         self.delay_time,
+                                         self.pulse,
+                                         self.interp_data[ind_start:ind_end])
             self.error[i] = error
             print(i, self.error[i])
             self.Output_Ej[i] = self.E_j
@@ -307,4 +301,4 @@ class Retrieval:
 
 ret = Retrieval()
 ret.load_data("TestData/new_alignment_method.txt")
-ret.retrieve(plot_update=False)
+ret.retrieve(plot_update=True)
