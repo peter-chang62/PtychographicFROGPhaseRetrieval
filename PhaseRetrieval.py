@@ -39,7 +39,6 @@ def shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
 
 def calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                      spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref):
-
     shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref)
 
     spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
@@ -49,7 +48,6 @@ def calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
 
 def calculate_error(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref, spctgm_ref):
-
     calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                      spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref)
 
@@ -143,6 +141,7 @@ class Retrieval:
         self.amp = np.zeros(self.E_j.shape)
         self.error = np.zeros(self.maxiter)
         self.Output_Ej = np.zeros((self.maxiter, len(self.E_j)), dtype=self.E_j.dtype)
+        self.Output_EWj = np.zeros((self.maxiter, len(self.E_j)), dtype=self.E_j.dtype)
 
         self.AT2D = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
         self.AT2D_to_shift = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
@@ -277,9 +276,8 @@ class Retrieval:
                 self.E_j[:] += self.corr1 + self.corr2
                 fft(self.E_j, self.EW_j)
 
-                self.AT2D[:] = self.E_j[:]
-                self.AW2D_to_shift[:] = self.EW_j[:]
-
+            self.AT2D[:] = self.E_j[:]
+            self.AW2D_to_shift[:] = self.EW_j[:]
             error = calculate_error(self.AT2D,
                                     self.AT2D_to_shift,
                                     self.AW2D_to_shift,
@@ -292,6 +290,7 @@ class Retrieval:
             self.error[i] = error
             print(i, self.error[i])
             self.Output_Ej[i] = self.E_j
+            self.Output_EWj[i] = self.EW_j
 
             ax1.clear()
             ax2.clear()
