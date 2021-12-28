@@ -19,11 +19,11 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def shift1D(AT, AW, dT_fs, pulse_ref):
+def shift1D(AT_to_shift, AW, AW_to_shift, dT_fs, pulse_ref):
     pulse_ref: fpn.Pulse
 
-    AW[:] *= np.exp(1j * pulse_ref.V_THz[:] * dT_fs[:] * 1e-3)
-    ifft(AT, AW)
+    AW_to_shift[:] = AW[:] * np.exp(1j * pulse_ref.V_THz[:] * dT_fs * 1e-3)
+    ifft(AT_to_shift, AW_to_shift)
 
 
 def shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
@@ -39,19 +39,21 @@ def shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref):
 
 def calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                      spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref):
+
     shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, pulse_ref)
 
     spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
     fft(spctgm_to_calc_Tdomain, spctgm_to_calc_Wdomain, axis=1)
-    spctgm_to_calc_Wdomain[:] **= 2.
+    spctgm_to_calc_Wdomain[:] *= spctgm_to_calc_Wdomain.conj()
 
 
 def calculate_error(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                     spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref, spctgm_ref):
+
     calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                      spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, pulse_ref)
 
-    num = np.sqrt(np.sum((spctgm_to_calc_Wdomain - spctgm_ref) ** 2))
+    num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real - spctgm_ref) ** 2))
     denom = np.sqrt(np.sum(spctgm_ref ** 2))
     return num / denom
 
@@ -106,18 +108,6 @@ class Retrieval:
                                time_window_ps=10,
                                NPTS=2 ** 12)
 
-        self.E_j = np.zeros(self.pulse.AT.shape, dtype=self.pulse.AT.dtype)
-        self.Eshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.corr1 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.corr2 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.psi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.psiPrime_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.phi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.phase = np.zeros(self.E_j.shape)
-        self.amp = np.zeros(self.E_j.shape)
-        self.error = np.zeros(maxiter)
-        self.Output_Ej = np.zeros((maxiter, len(self.E_j)), dtype=self.E_j.dtype)
-
         self._rng = np.random.default_rng()
 
     def load_data(self, path_to_data):
@@ -127,8 +117,8 @@ class Retrieval:
         self._data = data[:, 1:][1:]
 
         # center T0
-        ind_max = np.unravel_index(np.argmax(data), data.shape)[0]
-        self._data = np.roll(data, -(ind_max - len(data) // 2), axis=0)
+        ind_max = np.unravel_index(np.argmax(self._data), self._data.shape)[0]
+        self._data = np.roll(self._data, -(ind_max - len(self._data) // 2), axis=0)
 
         # reset certain variables: have not yet corrected for phase matching
         # make sure to re-interpolate the data to the sim grid
@@ -136,6 +126,30 @@ class Retrieval:
         del self._interp_data
         gc.collect()
         self._interp_data = None
+
+    def setup_retrieval_arrays(self, delay_time):
+
+        self.E_j = np.zeros(self.pulse.AT.shape, dtype=self.pulse.AT.dtype)
+        self.EW_j = np.zeros(self.E_j.shape, dtype=self.pulse.AT.dtype)
+        self.Eshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.EWshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.corr1 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.corr2 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.corr2W = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.psi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.psiPrime_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.phi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
+        self.phase = np.zeros(self.E_j.shape)
+        self.amp = np.zeros(self.E_j.shape)
+        self.error = np.zeros(self.maxiter)
+        self.Output_Ej = np.zeros((self.maxiter, len(self.E_j)), dtype=self.E_j.dtype)
+
+        self.AT2D = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
+        self.AT2D_to_shift = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
+        self.AW2D_to_shift = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
+        self.spctgm_to_calc_Tdomain = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
+        self.spctgm_to_calc_Wdomain = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
+        self.phase2D = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
 
     def interpolate_data_to_sim_grid(self):
         self._interp_data = interpolate_spctgm_to_grid(F_mks_input=self.exp_F_mks,
@@ -176,6 +190,9 @@ class Retrieval:
                                 theta_pm_rad=bbo.phase_match_angle_rad(1.55),
                                 alpha_rad=np.arctan(.25 / 2)):
 
+        if self.corrected_for_phase_matching:
+            raise RuntimeWarning("already corrected for phase matching!")
+
         R = bbo.R(wl_um=self.exp_wl_nm * 1e-3 * 2,  # fundamental wavelength
                   length_um=length_um,  # crystal thickness
                   theta_pm_rad=theta_pm_rad,
@@ -186,9 +203,9 @@ class Retrieval:
 
         self.corrected_for_phase_matching = True
 
-    def scale_initial_pwr_to_spctgm(self, corr_for_pm=True,
-                                    start_time=None,
-                                    end_time=None):
+    def retrieve(self, corr_for_pm=True,
+                 start_time=None,
+                 end_time=None):
 
         if corr_for_pm:
             # make sure to correct for phase matcing
@@ -210,18 +227,81 @@ class Retrieval:
         ind_start = np.argmin((self.exp_T_fs - start_time) ** 2)
         ind_end = np.argmin((self.exp_T_fs - end_time) ** 2)
 
-        delay_time = self.exp_T_fs[ind_start:ind_end]
-        time_order = np.array([*zip(delay_time, np.arange(ind_start, ind_end))])
+        self.delay_time = self.exp_T_fs[ind_start:ind_end]
+        time_order = np.array([*zip(self.delay_time, np.arange(ind_start, ind_end))])
+
+        self.setup_retrieval_arrays(self.delay_time)  # initializes arrays to zeros
 
         self.E_j[:] = self.pulse.AT[:]
-        # print("initial error:", calculate_error(self.E_j,
-        #                                         delay_time,
-        #                                         self.pulse,
-        #                                         self.interp_data[ind_start:ind_end]))
-        # fig, (ax1, ax2) = plt.subplots(1, 2)
-        # ind_wl = (self.pulse.wl_um > 0).nonzero()[0]
-        # for i in range(self.maxiter):
-        #     self._rng.shuffle(time_order, axis=0)
-        #     alpha = self._rng.uniform(low=0.1, high=0.5)
-        #     for dt, j in time_order:
-        #         pass
+        fft(self.E_j, self.EW_j)  # set EW_j
+        self.AT2D[:] = self.E_j[:]
+        self.AT2D_to_shift[:] = self.E_j[:]
+        self.AW2D_to_shift[:] = self.EW_j[:]
+
+        error = calculate_error(self.AT2D,
+                                self.AT2D_to_shift,
+                                self.AW2D_to_shift,
+                                self.spctgm_to_calc_Tdomain,
+                                self.spctgm_to_calc_Wdomain,
+                                self.phase2D,
+                                self.delay_time,
+                                self.pulse,
+                                self.interp_data[ind_start:ind_end])
+
+        print("initial error:", error)
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ind_wl = (self.pulse.wl_um > 0).nonzero()
+
+        for i in range(self.maxiter):
+            self._rng.shuffle(time_order, axis=0)
+            alpha = self._rng.uniform(low=0.1, high=0.5)
+
+            for dt, j in time_order:
+                shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, self.pulse)
+                self.psi_j[:] = self.E_j[:] * self.Eshift_j[:]
+
+                fft(self.psi_j, self.phi_j)
+                self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
+                self.amp[:] = np.sqrt(self.interp_data[int(j)])
+                self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
+
+                ifft(self.psiPrime_j, self.phi_j)
+
+                self.corr1[:] = alpha * self.Eshift_j.conj() * \
+                                (self.psiPrime_j[:] - self.psi_j[:]) / max(abs(self.Eshift_j) ** 2)
+                self.corr2[:] = alpha * self.E_j.conj() * \
+                                (self.psiPrime_j[:] - self.psi_j[:]) / max(abs(self.E_j) ** 2)
+                fft(self.corr2, self.corr2W)
+                shift1D(self.corr2, self.corr2W, self.corr2W, -dt, self.pulse)
+
+                self.E_j[:] += self.corr1 + self.corr2
+                fft(self.E_j, self.EW_j)
+
+                self.AT2D[:] = self.E_j[:]
+                self.AW2D_to_shift[:] = self.EW_j[:]
+
+            error = calculate_error(self.AT2D,
+                                    self.AT2D_to_shift,
+                                    self.AW2D_to_shift,
+                                    self.spctgm_to_calc_Tdomain,
+                                    self.spctgm_to_calc_Wdomain,
+                                    self.phase2D,
+                                    self.delay_time,
+                                    self.pulse,
+                                    self.interp_data[ind_start:ind_end])
+            self.error[i] = error
+            print(i, self.error[i])
+            self.Output_Ej[i] = self.E_j
+
+            ax1.clear()
+            ax2.clear()
+            ax1.plot(self.pulse.T_ps, abs(self.E_j) ** 2)
+            ax2.plot(self.pulse.wl_um[ind_wl], abs(self.EW_j[ind_wl]) ** 2)
+            ax2.set_xlim(1, 2)
+            fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
+            plt.pause(.001)
+
+
+ret = Retrieval()
+ret.load_data("TestData/new_alignment_method.txt")
+ret.retrieve()
