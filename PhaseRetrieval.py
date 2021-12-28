@@ -204,7 +204,8 @@ class Retrieval:
 
     def retrieve(self, corr_for_pm=True,
                  start_time=None,
-                 end_time=None):
+                 end_time=None,
+                 plot_update=False):
 
         if corr_for_pm:
             # make sure to correct for phase matcing
@@ -248,8 +249,10 @@ class Retrieval:
                                 self.interp_data[ind_start:ind_end])
 
         print("initial error:", error)
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        ind_wl = (self.pulse.wl_um > 0).nonzero()
+
+        if plot_update:
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            ind_wl = (self.pulse.wl_um > 0).nonzero()
 
         for i in range(self.maxiter):
             self._rng.shuffle(time_order, axis=0)
@@ -292,15 +295,16 @@ class Retrieval:
             self.Output_Ej[i] = self.E_j
             self.Output_EWj[i] = self.EW_j
 
-            ax1.clear()
-            ax2.clear()
-            ax1.plot(self.pulse.T_ps, abs(self.E_j) ** 2)
-            ax2.plot(self.pulse.wl_um[ind_wl], abs(self.EW_j[ind_wl]) ** 2)
-            ax2.set_xlim(1, 2)
-            fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
-            plt.pause(.001)
+            if plot_update:
+                ax1.clear()
+                ax2.clear()
+                ax1.plot(self.pulse.T_ps, abs(self.E_j) ** 2)
+                ax2.plot(self.pulse.wl_um[ind_wl], abs(self.EW_j[ind_wl]) ** 2)
+                ax2.set_xlim(1, 2)
+                fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
+                plt.pause(.001)
 
 
 ret = Retrieval()
 ret.load_data("TestData/new_alignment_method.txt")
-ret.retrieve()
+ret.retrieve(plot_update=False)

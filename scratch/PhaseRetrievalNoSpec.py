@@ -27,7 +27,7 @@ def calculate_spectrogram(AT, delay_window_fs, T_fs):
 
 
 # %% Load the Data
-DATA = np.genfromtxt("TestData/new_alignment_method.txt")
+DATA = np.genfromtxt("../TestData/new_alignment_method.txt")
 
 # %% time and frequency axis
 T_fs = DATA[:, 0][1:]
