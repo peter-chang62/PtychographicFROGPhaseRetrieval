@@ -20,6 +20,95 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
+def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref):
+    spctgm_calc = calculate_spctgm(AT, dT_fs_vec, pulse_ref)
+    num = np.sqrt(np.sum((spctgm_calc - spctgm_ref) ** 2))
+    denom = np.sqrt(np.sum(abs(spctgm_ref) ** 2))
+    error = num / denom
+
+    fig, axs = plt.subplots(2, 2)
+    axs = axs.flatten()
+    pulse_ref: fpn.Pulse
+    axs[0].plot(pulse_ref.T_ps, abs(AT) ** 2)
+    AW = fft(AT)
+    indwl = (pulse_ref.wl_um > 0).nonzero()[0]
+    axs[1].plot(pulse_ref.wl_um[indwl], abs(AW[indwl]) ** 2)
+    axs[1].set_xlim(1., 2.)
+    axs[2].pcolormesh(pulse_ref.F_THz, dT_fs_vec, spctgm_ref, cmap='nipy_spectral')
+    axs[3].pcolormesh(pulse_ref.F_THz, dT_fs_vec, spctgm_calc, cmap='nipy_spectral')
+    axs[0].set_xlabel("T (ps)")
+    axs[1].set_xlabel("$\mathrm{\mu m}$")
+    axs[2].set_xlabel("F (THz)")
+    axs[2].set_ylabel("T (fs)")
+    axs[3].set_xlabel("F (THz)")
+    axs[3].set_ylabel("T (fs)")
+    axs[2].set_title("Experiment")
+    axs[3].set_title("Retrieved")
+    fig.suptitle("Error: " + '%.3f' % error)
+
+
+def shift2D(AT2D, dT_fs_vec, pulse_ref):
+    """
+    :param AT2D: complex 2D array, electric fields in time domain are row indexed
+    :param dT_fs_vec: 1D numpy array, time shift in femtoseconds for each E-field (row) in AT2D
+    :param pulse_ref: reference pulse for the frequency axis
+    :return: shifted AT2D, each E-field (row) has been shifted by amounts specified in dT_fs_vec
+    """
+
+    pulse_ref: fpn.Pulse
+    AW2D = fft(AT2D, axis=1)
+    dT_ps_vec = dT_fs_vec * 1e-3
+
+    phase = np.zeros(AW2D.shape, dtype=np.complex128)
+    phase[:] = pulse_ref.V_THz
+    phase *= 1j * dT_ps_vec[:, np.newaxis]
+    phase = np.exp(phase)
+
+    AW2D *= phase
+    return ifft(AW2D, axis=1)
+
+
+def calculate_spctgm(AT, dT_fs_vec, pulse_ref):
+    """
+    :param AT: 1D complex array, electric-field in time domain
+    :param dT_fs_vec: delay time axis in femtoseconds
+    :param pulse_ref: reference pulse for frequency axis
+    :return: calculated spectrogram, time delay is row indexed, and frequency is column indexed
+    """
+
+    AT2D = np.zeros((len(dT_fs_vec), len(AT)), dtype=np.complex128)
+    AT2D[:] = AT
+    AT2D_shift = shift2D(AT2D, dT_fs_vec, pulse_ref)
+
+    spectrogram = AT2D * AT2D_shift
+    spectrogram = abs(fft(spectrogram, axis=1)) ** 2
+    return spectrogram
+
+
+def fft(x, axis=None):
+    """
+    calculates the 1D fft of the numpy array x
+    if x is not 1D you need to specify the axis
+    """
+
+    if axis is None:
+        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
+    else:
+        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+
+
+def ifft(x, axis=None):
+    """
+    calculates the 1D ifft of the numpy array x
+    if x is not 1D you need to specify the axis
+    """
+
+    if axis is None:
+        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x)))
+    else:
+        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+
+
 def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
     gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm)
     return gridded(F_mks_output, T_fs_output)
@@ -221,7 +310,7 @@ class Retrieval:
     def retrieve(self, corr_for_pm=True,
                  start_time_fs=None,
                  end_time_fs=None,
-                 plot_update=False):
+                 plot_update=True):
 
         if corr_for_pm:
             # make sure to correct for phase matching
