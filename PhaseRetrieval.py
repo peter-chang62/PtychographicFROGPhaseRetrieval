@@ -155,12 +155,16 @@ class Retrieval:
         self.fft2_output = pyfftw.empty_aligned(self.AT2D.shape, dtype='complex128')
 
         # 1D fft
-        self.fft = pyfftw.FFTW(self.fft_input, self.fft_output, axes=[0], direction='FFTW_FORWARD')
-        self.ifft = pyfftw.FFTW(self.fft_output, self.fft_input, axes=[0], direction='FFTW_BACKWARD')
+        self.fft = pyfftw.FFTW(self.fft_input, self.fft_output, axes=[0], direction='FFTW_FORWARD',
+                               flags=["FFTW_MEASURE"])
+        self.ifft = pyfftw.FFTW(self.fft_output, self.fft_input, axes=[0], direction='FFTW_BACKWARD',
+                                flags=["FFTW_MEASURE"])
 
         # 2D fft
-        self.fft2 = pyfftw.FFTW(self.fft2_input, self.fft2_output, axes=[1], direction='FFTW_FORWARD')
-        self.ifft2 = pyfftw.FFTW(self.fft2_output, self.fft2_input, axes=[1], direction='FFTW_BACKWARD')
+        self.fft2 = pyfftw.FFTW(self.fft2_input, self.fft2_output, axes=[1], direction='FFTW_FORWARD',
+                                flags=["FFTW_MEASURE"])
+        self.ifft2 = pyfftw.FFTW(self.fft2_output, self.fft2_input, axes=[1], direction='FFTW_BACKWARD',
+                                 flags=["FFTW_MEASURE"])
 
     def interpolate_data_to_sim_grid(self):
         self._interp_data = interpolate_spctgm_to_grid(F_mks_input=self.exp_F_mks,
@@ -233,19 +237,25 @@ class Retrieval:
         if end_time is None:
             end_time = self.exp_T_fs[-1]
 
-        """fftshift everything before fft's are calculated """
-        # the initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts
-        # everything that follows
+        """fftshift everything before fft's are calculated 
+        
+        The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts 
+        everything that follows 
+        
+        The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
+        also needs to be fftshifted 
+        
+        The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
+        also needs to be fftshifted 
+        
+        Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be 
+        fftshifted """
         AT0_fftshift = np.fft.ifftshift(self.pulse.AT)
-        # the calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation
-        # also needs to be fftshifted
         self._interp_data = np.fft.ifftshift(self._interp_data, axes=1)
-        # the time shifted fields are calculated using this frequency axis, since the fields are fftshifted now the
-        # frequency axis also needs to be fftshifted
         V_THz_fftshift = np.fft.ifftshift(self.pulse.V_THz)
 
         # delay times to iterate over for the phase retrieval. We set this to the experimentally measured delayed
-        # times. The user has the option to narrow the time window to something smaller than what was measured
+        # times. The user has the option to narrow the time window to a subset of what was measured
         # experimentally
         ind_start = np.argmin((self.exp_T_fs - start_time) ** 2)
         ind_end = np.argmin((self.exp_T_fs - end_time) ** 2)
