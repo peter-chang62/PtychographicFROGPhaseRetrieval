@@ -219,8 +219,8 @@ class Retrieval:
         self.corrected_for_phase_matching = True
 
     def retrieve(self, corr_for_pm=True,
-                 start_time=None,
-                 end_time=None,
+                 start_time_fs=None,
+                 end_time_fs=None,
                  plot_update=False):
 
         if corr_for_pm:
@@ -232,10 +232,10 @@ class Retrieval:
         if self._interp_data is None:
             self.interpolate_data_to_sim_grid()
 
-        if start_time is None:
-            start_time = 0.0
-        if end_time is None:
-            end_time = self.exp_T_fs[-1]
+        if start_time_fs is None:
+            start_time_fs = 0.0
+        if end_time_fs is None:
+            end_time_fs = self.exp_T_fs[-1]
 
         """fftshift everything before fft's are calculated 
         
@@ -245,20 +245,17 @@ class Retrieval:
         The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
         also needs to be fftshifted 
         
-        The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
-        also needs to be fftshifted 
-        
         Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be 
         fftshifted """
         AT0_fftshift = np.fft.ifftshift(self.pulse.AT)
-        self._interp_data = np.fft.ifftshift(self._interp_data, axes=1)
+        interp_data_fftshift = np.fft.ifftshift(self._interp_data, axes=1)
         V_THz_fftshift = np.fft.ifftshift(self.pulse.V_THz)
 
         # delay times to iterate over for the phase retrieval. We set this to the experimentally measured delayed
         # times. The user has the option to narrow the time window to a subset of what was measured
         # experimentally
-        ind_start = np.argmin((self.exp_T_fs - start_time) ** 2)
-        ind_end = np.argmin((self.exp_T_fs - end_time) ** 2)
+        ind_start = np.argmin((self.exp_T_fs - start_time_fs) ** 2)
+        ind_end = np.argmin((self.exp_T_fs - end_time_fs) ** 2)
         self.delay_time = self.exp_T_fs[ind_start:ind_end]
         time_order = np.array([*zip(self.delay_time, np.arange(ind_start, ind_end))])
 
@@ -266,7 +263,7 @@ class Retrieval:
         self.setup_retrieval_arrays(self.delay_time)
 
         # scale the pulse power to correspond to the spectrogram (very important!)
-        AT0_fftshift[:] = self.scale_field_to_spctgm(AT0_fftshift, self.interp_data)
+        AT0_fftshift[:] = self.scale_field_to_spctgm(AT0_fftshift, interp_data_fftshift)
 
         # set the electric field initially to the guess electric field
         self.E_j[:] = AT0_fftshift[:]
@@ -285,7 +282,7 @@ class Retrieval:
                                      self.phase2D,
                                      self.delay_time,
                                      V_THz_fftshift,
-                                     self.interp_data[ind_start:ind_end])
+                                     interp_data_fftshift[ind_start:ind_end])
 
         print("initial error:", error)
 
@@ -305,7 +302,7 @@ class Retrieval:
                 self.phi_j[:] = self.fft()
 
                 self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
-                self.amp[:] = np.sqrt(self.interp_data[int(j)])
+                self.amp[:] = np.sqrt(interp_data_fftshift[int(j)])
                 self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
                 self.fft_output[:] = self.phi_j[:]
@@ -335,7 +332,7 @@ class Retrieval:
                                          self.phase2D,
                                          self.delay_time,
                                          V_THz_fftshift,
-                                         self.interp_data[ind_start:ind_end])
+                                         interp_data_fftshift[ind_start:ind_end])
             self.error[i] = error
             print(i, self.error[i])
             self.Output_Ej[i] = self.E_j
@@ -350,7 +347,9 @@ class Retrieval:
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
+        self.AT_ret = self.Output_Ej[np.argmin(self.error)]
+        self.AW_ret = self.Output_EWj[np.argmin(self.error)]
 
-ret = Retrieval()
-ret.load_data("TestData/new_alignment_method.txt")
-ret.retrieve(plot_update=True)
+# ret = Retrieval()
+# ret.load_data("TestData/new_alignment_method.txt")
+# ret.retrieve(plot_update=True)
