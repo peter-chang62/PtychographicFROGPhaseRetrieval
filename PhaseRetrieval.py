@@ -442,8 +442,8 @@ class Retrieval:
 
 
 ret = Retrieval()
-ret.load_data("TestData/new_alignment_method.txt")
-ret.correct_for_phase_match(alpha_rad=BBO.deg_to_rad(6.))
+ret.load_data("Data/01-14-2022/successfully_symmetric_FROG.txt")
+# ret.correct_for_phase_match(alpha_rad=BBO.deg_to_rad(6.))
 # plt.pcolormesh(ret.exp_wl_nm, ret.exp_T_fs, ret.data)
 # plt.axvline(450, color='r')
 # ret.retrieve(plot_update=True)
