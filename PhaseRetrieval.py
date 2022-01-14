@@ -302,8 +302,9 @@ class Retrieval:
                   theta_pm_rad=theta_pm_rad,
                   alpha_rad=alpha_rad)
 
-        ind = (self.exp_wl_nm > 500).nonzero()[0]
-        self.data[:, ind] /= R[ind]
+        # ind = (self.exp_wl_nm > 500).nonzero()[0]
+        # self.data[:, ind] /= R[ind]
+        self.data[:] /= R
 
         self.corrected_for_phase_matching = True
 
@@ -439,6 +440,11 @@ class Retrieval:
         self.AT_ret = self.Output_Ej[np.argmin(self.error)]
         self.AW_ret = self.Output_EWj[np.argmin(self.error)]
 
-# ret = Retrieval()
-# ret.load_data("TestData/new_alignment_method.txt")
-# ret.retrieve(plot_update=True)
+
+ret = Retrieval()
+ret.load_data("TestData/new_alignment_method.txt")
+ret.correct_for_phase_match(alpha_rad=BBO.deg_to_rad(6.))
+# plt.pcolormesh(ret.exp_wl_nm, ret.exp_T_fs, ret.data)
+# plt.axvline(450, color='r')
+ret.retrieve(plot_update=True)
+plot_ret_results(np.fft.fftshift(ret.AT_ret), ret.exp_T_fs, ret.pulse, ret.interp_data)
