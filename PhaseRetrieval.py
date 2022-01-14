@@ -292,7 +292,7 @@ class Retrieval:
 
     def correct_for_phase_match(self, length_um=50.,
                                 theta_pm_rad=bbo.phase_match_angle_rad(1.55),
-                                alpha_rad=np.arctan(.25 / 2)):
+                                alpha_rad=BBO.deg_to_rad(3.5)):
 
         if self.corrected_for_phase_matching:
             raise RuntimeWarning("already corrected for phase matching!")
@@ -302,9 +302,9 @@ class Retrieval:
                   theta_pm_rad=theta_pm_rad,
                   alpha_rad=alpha_rad)
 
-        # ind = (self.exp_wl_nm > 500).nonzero()[0]
-        # self.data[:, ind] /= R[ind]
-        self.data[:] /= R
+        ind = (self.exp_wl_nm > 440).nonzero()[0]
+        self.data[:, ind] /= R[ind]
+        # self.data[:] /= R
 
         self.corrected_for_phase_matching = True
 
@@ -437,8 +437,8 @@ class Retrieval:
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
-        self.AT_ret = self.Output_Ej[np.argmin(self.error)]
-        self.AW_ret = self.Output_EWj[np.argmin(self.error)]
+        self.AT_ret = np.fft.fftshift(self.Output_Ej[np.argmin(self.error)])
+        self.AW_ret = np.fft.fftshift(self.Output_EWj[np.argmin(self.error)])
 
 
 ret = Retrieval()
@@ -446,5 +446,5 @@ ret.load_data("TestData/new_alignment_method.txt")
 ret.correct_for_phase_match(alpha_rad=BBO.deg_to_rad(6.))
 # plt.pcolormesh(ret.exp_wl_nm, ret.exp_T_fs, ret.data)
 # plt.axvline(450, color='r')
-ret.retrieve(plot_update=True)
-plot_ret_results(np.fft.fftshift(ret.AT_ret), ret.exp_T_fs, ret.pulse, ret.interp_data)
+# ret.retrieve(plot_update=True)
+# plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
