@@ -34,8 +34,10 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref):
     indwl = (pulse_ref.wl_um > 0).nonzero()[0]
     axs[1].plot(pulse_ref.wl_um[indwl], abs(AW[indwl]) ** 2)
     axs[1].set_xlim(1., 2.)
-    axs[2].pcolormesh(pulse_ref.F_THz, dT_fs_vec, spctgm_ref, cmap='nipy_spectral')
-    axs[3].pcolormesh(pulse_ref.F_THz, dT_fs_vec, spctgm_calc, cmap='nipy_spectral')
+    axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_ref.T, cmap='jet')
+    axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_calc.T, cmap='jet')
+    axs[2].set_ylim(1, 2)
+    axs[3].set_ylim(1, 2)
     axs[0].set_xlabel("T (ps)")
     axs[1].set_xlabel("$\mathrm{\mu m}$")
     axs[2].set_xlabel("F (THz)")
@@ -114,11 +116,16 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
     return gridded(F_mks_output, T_fs_output)
 
 
-def apply_filter(AW, ll_um, ul_um, pulse_ref):
+def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
     pusle_ref: fpn.Pulse
 
-    ind_ll = (pulse_ref.wl_um < ll_um).nonzero()[0]
-    ind_ul = (pulse_ref.wl_um > ul_um).nonzero()[0]
+    if fftshift:
+        wl = np.fft.fftshift(pulse_ref.wl_um)
+    else:
+        wl = pulse_ref.wl_um
+
+    ind_ll = (wl < ll_um).nonzero()[0]
+    ind_ul = (wl > ul_um).nonzero()[0]
 
     AW[ind_ll] = 0.0
     AW[ind_ul] = 0.0
@@ -497,8 +504,11 @@ class Retrieval:
         self.AW_ret = np.fft.fftshift(self.Output_EWj[np.argmin(self.error)])
 
 
-ret = Retrieval()
+# %%
+ret = Retrieval(maxiter=50)
 # ret.load_data("TestData/sanity_check_data.txt")
 ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
 ret.retrieve(corr_for_pm=True, plot_update=True)
+apply_filter(ret.AW_ret, 1, 2, ret.pulse)
+ret.AT_ret = ifft(ret.AW_ret)
 plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
