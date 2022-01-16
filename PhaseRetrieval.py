@@ -386,9 +386,11 @@ class Retrieval:
             self.pulse.set_AT(field)
 
         else:
-            T_fs, field = initial_guess
-            field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
-            self.pulse.set_AT(field)
+            # T_fs, field = initial_guess
+            # field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
+            # self.pulse.set_AT(field)
+
+            pass
 
         """fftshift everything before fft's are calculated 
         
@@ -508,7 +510,8 @@ class Retrieval:
 ret = Retrieval(maxiter=50)
 # ret.load_data("TestData/sanity_check_data.txt")
 ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
-ret.retrieve(corr_for_pm=True, plot_update=True)
+ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None)
+
 apply_filter(ret.AW_ret, 1, 2, ret.pulse)
 ret.AT_ret = ifft(ret.AW_ret)
 plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
