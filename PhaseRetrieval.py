@@ -114,6 +114,16 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
     return gridded(F_mks_output, T_fs_output)
 
 
+def apply_filter(AW, ll_um, ul_um, pulse_ref):
+    pusle_ref: fpn.Pulse
+
+    ind_ll = (pulse_ref.wl_um < ll_um).nonzero()[0]
+    ind_ul = (pulse_ref.wl_um > ul_um).nonzero()[0]
+
+    AW[ind_ll] = 0.0
+    AW[ind_ul] = 0.0
+
+
 class Retrieval:
     def __init__(self, maxiter=100):
         self._exp_T_fs = None
@@ -488,7 +498,7 @@ class Retrieval:
 
 
 ret = Retrieval()
-ret.load_data("TestData/sanity_check_data.txt")
-# ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
+# ret.load_data("TestData/sanity_check_data.txt")
+ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
 ret.retrieve(corr_for_pm=True, plot_update=True)
 plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
