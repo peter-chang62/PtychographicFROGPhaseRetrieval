@@ -131,7 +131,9 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
 
 
 # %% Load the Data
-DATA = np.genfromtxt("TestData/new_alignment_method.txt")
+# DATA = np.genfromtxt("TestData/sanity_check_data.txt")
+DATA = np.genfromtxt("Data/01-14-2022/successfully_symmetric_frog.txt")
+# DATA = np.genfromtxt("TestData/sanity_check_data.txt")
 
 # %% time and frequency axis
 T_fs = DATA[:, 0][1:]
@@ -143,20 +145,29 @@ F_mks = sc.c / (wl_nm * 1e-9)
 
 # %% center T0
 ind_max = np.unravel_index(np.argmax(data), data.shape)[0]
-data = np.roll(data, -(ind_max - len(data) // 2), axis=0)
+ind_center = len(T_fs) // 2
+if ind_max < ind_center:
+    diff = ind_center - ind_max
+    data = data[:-diff]
+    T_fs = T_fs[diff:]
+
+elif ind_max > ind_center:
+    diff = ind_max - ind_center
+    data = data[diff:]
+    T_fs = T_fs[:-diff]
 
 # %% phase matching
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_um=wl_nm * 1e-3 * 2,  # fundamental wavelength
           length_um=50.,  # crystal thickness
           theta_pm_rad=bbo.phase_match_angle_rad(1.55),  # crystal was phasematched for 1550 nm
-          alpha_rad=np.arctan(.25 / 2)
+          alpha_rad=BBO.deg_to_rad(3.5)
           )
 
 # %% correct for phase matching
-ind500nm = (wl_nm > 500).nonzero()[0]
+ind440nm = (wl_nm > 440).nonzero()[0]
 dataCorrected = np.copy(data)
-dataCorrected[:, ind500nm] /= R[ind500nm]
+dataCorrected[:, ind440nm] /= R[ind440nm]
 
 # %% initial guess and set the simulation grid
 pulse = fpn.Pulse(T0_ps=0.02,
@@ -166,10 +177,15 @@ pulse = fpn.Pulse(T0_ps=0.02,
 
 # %% interpolate experimental data onto the simulation grid
 spctgm = interpolate_spctgm_to_grid(F_mks_input=F_mks,
-                                    F_mks_output=pulse.F_mks * 2,
+                                    F_mks_output=pulse.F_mks * 2.0,
                                     T_fs_input=T_fs,
                                     T_fs_output=T_fs,
                                     spctgm=dataCorrected)
+
+# %% Try this
+autocorr = np.sum(data, axis=1)
+field = spi.interp1d(T_fs, autocorr, bounds_error=False, fill_value=0.0)(pulse.T_ps * 1e3)
+pulse.set_AT(field)
 
 # %% if the spectrogram is to be replicated,
 # the power needs to match, so scale the pulse field accordingly

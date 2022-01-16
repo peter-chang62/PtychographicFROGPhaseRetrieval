@@ -197,7 +197,16 @@ class Retrieval:
 
         # center T0
         ind_max = np.unravel_index(np.argmax(self._data), self._data.shape)[0]
-        self._data = np.roll(self._data, -(ind_max - len(self._data) // 2), axis=0)
+        ind_center = len(self.exp_T_fs) // 2
+        if ind_max < ind_center:
+            diff = ind_center - ind_max
+            self._data = self._data[:-diff]
+            self._exp_T_fs = self.exp_T_fs[diff:]
+
+        elif ind_max > ind_center:
+            diff = ind_max - ind_center
+            self._data = self._data[diff:]
+            self._exp_T_fs = self.exp_T_fs[:-diff]
 
         # reset certain variables: have not yet corrected for phase matching
         # make sure to re-interpolate the data to the sim grid
@@ -311,7 +320,8 @@ class Retrieval:
     def retrieve(self, corr_for_pm=True,
                  start_time_fs=None,
                  end_time_fs=None,
-                 plot_update=True):
+                 plot_update=True,
+                 initial_guess=None):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -326,6 +336,42 @@ class Retrieval:
             start_time_fs = 0.0
         if end_time_fs is None:
             end_time_fs = self.exp_T_fs[-1]
+
+        if initial_guess is None:
+            initial_guess = np.sum(self._interp_data, axis=1)
+            initial_guess -= min(initial_guess)
+
+            """maybe try symmetrizing the autocorrelation... doesn't appear to help """
+            # ind_min = np.argmin(initial_guess)
+            # ind_max = np.argmax(initial_guess)
+            # center_ind = len(initial_guess) // 2
+            # if ind_min < center_ind:
+            #     ind_max += 1
+            #     section = initial_guess[:ind_max]
+            #     initial_guess = np.hstack((section, section[::-1][1:]))
+            #
+            #     # ind_min = np.argmin(initial_guess)
+            #     # initial_guess = initial_guess[ind_min:-ind_min]
+            #
+            # elif ind_min > center_ind:
+            #     section = initial_guess[ind_max:]
+            #     initial_guess = np.hstack((section[::-1], section[1:]))
+            #
+            #     # ind_min = np.argmin(initial_guess)
+            #     # initial_guess = initial_guess[ind_min:-ind_min]
+            #
+            # N = len(initial_guess) // 2
+            # T_fs = np.linspace(-N, N, len(initial_guess))
+            # field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
+
+            field = spi.interp1d(self.exp_T_fs, initial_guess, bounds_error=False, fill_value=0.0)(
+                self.pulse.T_ps * 1e3)
+            self.pulse.set_AT(field)
+
+        else:
+            T_fs, field = initial_guess
+            field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
+            self.pulse.set_AT(field)
 
         """fftshift everything before fft's are calculated 
         
@@ -442,9 +488,7 @@ class Retrieval:
 
 
 ret = Retrieval()
-ret.load_data("Data/01-14-2022/successfully_symmetric_FROG.txt")
-# ret.correct_for_phase_match(alpha_rad=BBO.deg_to_rad(6.))
-# plt.pcolormesh(ret.exp_wl_nm, ret.exp_T_fs, ret.data)
-# plt.axvline(450, color='r')
-# ret.retrieve(plot_update=True)
-# plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
+ret.load_data("TestData/sanity_check_data.txt")
+# ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
+ret.retrieve(corr_for_pm=True, plot_update=True)
+plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
