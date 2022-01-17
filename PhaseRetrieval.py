@@ -20,10 +20,17 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref):
+def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
+    if filter_um is not None:
+        wl = pulse_ref.wl_um
+        ll, ul = filter_um
+        ind_filter = (np.logical_and(wl > ll, wl < ul)).nonzero()[0]
+    else:
+        ind_filter = np.arange(len(pulse_ref.wl_um))
+
     spctgm_calc = calculate_spctgm(AT, dT_fs_vec, pulse_ref)
-    num = np.sqrt(np.sum((spctgm_calc - spctgm_ref) ** 2))
-    denom = np.sqrt(np.sum(abs(spctgm_ref) ** 2))
+    num = np.sqrt(np.sum((spctgm_calc[:, ind_filter] - spctgm_ref[:, ind_filter]) ** 2))
+    denom = np.sqrt(np.sum(abs(spctgm_ref[:, ind_filter]) ** 2))
     error = num / denom
 
     fig, axs = plt.subplots(2, 2)
@@ -180,12 +187,14 @@ class Retrieval:
         spctgm_to_calc_Wdomain[:] *= spctgm_to_calc_Wdomain.conj()
 
     def calculate_error(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                        spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz, spctgm_ref):
+                        spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz, spctgm_ref,
+                        ind_filter):
+
         self.calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                               spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz)
 
-        num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real - spctgm_ref) ** 2))
-        denom = np.sqrt(np.sum(spctgm_ref ** 2))
+        num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real[:, ind_filter] - spctgm_ref[:, ind_filter]) ** 2))
+        denom = np.sqrt(np.sum(spctgm_ref[:, ind_filter] ** 2))
         return num / denom
 
     def scale_field_to_spctgm(self, AT, spctgm):
@@ -338,7 +347,8 @@ class Retrieval:
                  start_time_fs=None,
                  end_time_fs=None,
                  plot_update=True,
-                 initial_guess=None):
+                 initial_guess=None,
+                 filter_um=None):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -355,42 +365,27 @@ class Retrieval:
             end_time_fs = self.exp_T_fs[-1]
 
         if initial_guess is None:
+            # default to autocorrelation
             initial_guess = np.sum(self._interp_data, axis=1)
             initial_guess -= min(initial_guess)
 
-            """maybe try symmetrizing the autocorrelation... doesn't appear to help """
-            # ind_min = np.argmin(initial_guess)
-            # ind_max = np.argmax(initial_guess)
-            # center_ind = len(initial_guess) // 2
-            # if ind_min < center_ind:
-            #     ind_max += 1
-            #     section = initial_guess[:ind_max]
-            #     initial_guess = np.hstack((section, section[::-1][1:]))
-            #
-            #     # ind_min = np.argmin(initial_guess)
-            #     # initial_guess = initial_guess[ind_min:-ind_min]
-            #
-            # elif ind_min > center_ind:
-            #     section = initial_guess[ind_max:]
-            #     initial_guess = np.hstack((section[::-1], section[1:]))
-            #
-            #     # ind_min = np.argmin(initial_guess)
-            #     # initial_guess = initial_guess[ind_min:-ind_min]
-            #
-            # N = len(initial_guess) // 2
-            # T_fs = np.linspace(-N, N, len(initial_guess))
-            # field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
-
-            field = spi.interp1d(self.exp_T_fs, initial_guess, bounds_error=False, fill_value=0.0)(
-                self.pulse.T_ps * 1e3)
-            self.pulse.set_AT(field)
+            self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess)
 
         else:
-            # T_fs, field = initial_guess
-            # field = spi.interp1d(T_fs, initial_guess, bounds_error=False, fill_value=0.0)(self.pulse.T_ps * 1e3)
-            # self.pulse.set_AT(field)
+            # initial guess generally can be complex
+            T_fs, field = initial_guess
+            self.pulse.set_AT_experiment(T_fs * 1e-3, field)
 
-            pass
+        # for incomplete spectrograms, the user can set a range of wavelengths to be used for phase retrieval. It's
+        # important to note that the indexing will be done for fftshifted arrays
+        wl_um_fftshift = np.fft.ifftshift(self.pulse.wl_um)
+        if filter_um is not None:
+            ll_um, ul_um = filter_um
+            ind_filter_fftshift = (np.logical_and(wl_um_fftshift > ll_um, wl_um_fftshift < ul_um)).nonzero()[0]
+
+        else:
+            # in this case array[ind_filter_fftshift] = array[:]
+            ind_filter_fftshift = np.arange(len(wl_um_fftshift))
 
         """fftshift everything before fft's are calculated 
         
@@ -402,6 +397,7 @@ class Retrieval:
         
         Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be 
         fftshifted """
+
         AT0_fftshift = np.fft.ifftshift(self.pulse.AT)
         interp_data_fftshift = np.fft.ifftshift(self._interp_data, axes=1)
         V_THz_fftshift = np.fft.ifftshift(self.pulse.V_THz)
@@ -429,6 +425,10 @@ class Retrieval:
         self.AT2D_to_shift[:] = self.E_j[:]
         self.AW2D_to_shift[:] = self.EW_j[:]
 
+        if plot_update:
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            ind_wl = (self.pulse.wl_um > 0).nonzero()
+
         error = self.calculate_error(self.AT2D,
                                      self.AT2D_to_shift,
                                      self.AW2D_to_shift,
@@ -437,17 +437,15 @@ class Retrieval:
                                      self.phase2D,
                                      self.delay_time,
                                      V_THz_fftshift,
-                                     interp_data_fftshift[ind_start:ind_end])
+                                     interp_data_fftshift[ind_start:ind_end],
+                                     ind_filter_fftshift)
 
         print("initial error:", error)
-
-        if plot_update:
-            fig, (ax1, ax2) = plt.subplots(1, 2)
-            ind_wl = (self.pulse.wl_um > 0).nonzero()
 
         for i in range(self.maxiter):
             self._rng.shuffle(time_order, axis=0)
             alpha = self._rng.uniform(low=0.1, high=0.5)
+            # alpha = abs(0.2 + self._rng.normal(0, 1) / 20)
 
             for dt, j in time_order:
                 self.shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, V_THz_fftshift)
@@ -457,7 +455,7 @@ class Retrieval:
                 self.phi_j[:] = self.fft()
 
                 self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
-                self.amp[:] = np.sqrt(interp_data_fftshift[int(j)])
+                self.amp[ind_filter_fftshift] = np.sqrt(interp_data_fftshift[int(j), ind_filter_fftshift])
                 self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
                 self.fft_output[:] = self.phi_j[:]
@@ -487,7 +485,8 @@ class Retrieval:
                                          self.phase2D,
                                          self.delay_time,
                                          V_THz_fftshift,
-                                         interp_data_fftshift[ind_start:ind_end])
+                                         interp_data_fftshift[ind_start:ind_end],
+                                         ind_filter_fftshift)
             self.error[i] = error
             print(i, self.error[i])
             self.Output_Ej[i] = self.E_j
@@ -509,9 +508,18 @@ class Retrieval:
 # %%
 ret = Retrieval(maxiter=50)
 # ret.load_data("TestData/sanity_check_data.txt")
-ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
-ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None)
+# ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
+ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
+# ret._data = ret._data[::-1]
 
-apply_filter(ret.AW_ret, 1, 2, ret.pulse)
+# %%
+ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
+             filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2])
+
+# ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
+#              filter_um=None)
+
+apply_filter(ret.AW_ret, 0.9, 2, ret.pulse)
 ret.AT_ret = ifft(ret.AW_ret)
-plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
+plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data,
+                 filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2])
