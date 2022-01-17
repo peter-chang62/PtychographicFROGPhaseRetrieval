@@ -5,18 +5,13 @@ import scipy.interpolate
 normalize = lambda vec: vec / np.max(abs(vec))
 
 
-def get_data(file, path=None):
-    if path is None:
-        return np.genfromtxt("02-24-2021/" + file, delimiter=',',
-                             skip_header=29)
-    else:
-        return np.genfromtxt(path + file, delimiter=',', skip_header=29)
+def get_data(path):
+    return np.genfromtxt(path, delimiter=',', skip_header=29)
 
 
 class Data:
-    def __init__(self, file, path=None, data_is_log=True):
-        self.file = file
-        data = get_data(self.file, path)
+    def __init__(self, path, data_is_log=True):
+        data = get_data(path)
         if data_is_log:
             data[:, 1] = 10 ** (data[:, 1] / 10)
         self.x = data[:, 0]
