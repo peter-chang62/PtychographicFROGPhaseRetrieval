@@ -352,7 +352,8 @@ class Retrieval:
                  end_time_fs=None,
                  plot_update=True,
                  initial_guess_T_fs_AT=None,
-                 filter_um=None):
+                 filter_um=None,
+                 meas_spectrum_um=None):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -368,17 +369,25 @@ class Retrieval:
         if end_time_fs is None:
             end_time_fs = self.exp_T_fs[-1]
 
-        if initial_guess_T_fs_AT is None:
-            # default to autocorrelation
-            initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
-            initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
-
-            self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
+        if meas_spectrum_um is not None:
+            wl_um, spectrum = meas_spectrum_um
+            aw = np.sqrt(spectrum)
+            self.pulse.set_AW_experiment(wl_um, aw)
+            self.pulse.set_AT(ifft(self.pulse.AW))  # pynlo has ifft <-> fft defined in reverse
 
         else:
-            # initial guess generally can be complex
-            T_fs, field = initial_guess_T_fs_AT
-            self.pulse.set_AT_experiment(T_fs * 1e-3, field)
+
+            if initial_guess_T_fs_AT is None:
+                # default to autocorrelation
+                initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
+                initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
+
+                self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
+
+            else:
+                # initial guess generally can be complex
+                T_fs, field = initial_guess_T_fs_AT
+                self.pulse.set_AT_experiment(T_fs * 1e-3, field)
 
         # for incomplete spectrograms, the user can set a range of wavelengths to be used for phase retrieval. It's
         # important to note that the indexing will be done for fftshifted arrays
@@ -428,6 +437,9 @@ class Retrieval:
         self.AT2D[:] = self.E_j[:]
         self.AT2D_to_shift[:] = self.E_j[:]
         self.AW2D_to_shift[:] = self.EW_j[:]
+
+        if meas_spectrum_um is not None:
+            meas_amp_interp = abs(self.EW_j)
 
         if plot_update:
             fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -480,6 +492,14 @@ class Retrieval:
                 self.fft_input[:] = self.E_j[:]
                 self.EW_j[:] = self.fft()
 
+                if (meas_spectrum_um is not None) and i > 10:
+                    self.amp[:] = meas_amp_interp[:]
+                    self.phase[:] = np.arctan2(self.EW_j.imag, self.EW_j.real)
+                    self.EW_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
+
+                    self.fft_output[:] = self.EW_j[:]
+                    self.E_j[:] = self.ifft()
+
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
             error = self.calculate_error(self.AT2D,
@@ -527,14 +547,15 @@ ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # initial_guess = pulse.AT
 
 # %% or initial guess to be a phase retrieval result, but transform limited
-imag = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_imag_f_thz.txt")
-real = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_real_f_thz.txt")
+imag = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_imag_f_thz_2.txt")
+real = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_real_f_thz_2.txt")
 fthz = real[:, 0]
 real = real[:, 1]
 imag = imag[:, 1]
 AW = real + 1j * imag
 pulse = copy.deepcopy(ret.pulse)
-pulse.set_AW_experiment(sc.c * 1e6 / (fthz * 1e12), abs(AW))
+pulse.set_AW_experiment(sc.c * 1e6 / (fthz * 1e12), AW)
+pulse.set_AT(ifft(pulse.AW))
 initial_guess = pulse.AT
 
 # %%
@@ -545,7 +566,8 @@ initial_guess = pulse.AT
 
 ret.retrieve(corr_for_pm=True, plot_update=True,
              initial_guess_T_fs_AT=None,
-             filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2])
+             filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2],
+             meas_spectrum_um=[sc.c * 1e6 / (fthz * 1e12), abs(AW) ** 2])
 
 # ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
 #              filter_um=None)
