@@ -380,6 +380,7 @@ class Retrieval:
             if initial_guess_T_fs_AT is None:
                 # default to autocorrelation
                 initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
+                initial_guess_T_fs_AT[:] = (initial_guess_T_fs_AT[:] + initial_guess_T_fs_AT[::-1]) / 2
                 initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
 
                 self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
