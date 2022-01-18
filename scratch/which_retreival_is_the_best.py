@@ -20,8 +20,8 @@ def normalize(vec):
 
 
 # %%
-path = "/home/peterchang/Documents/Github/PtychographicFROGPhaseRetrieval/Data/01-17-2022/"
-path2 = "/home/peterchang/Documents/Github/PtychographicFROGPhaseRetrieval/Data/01-14-2022/"
+path = "../Data/01-17-2022/"
+path2 = "../Data/01-14-2022/"
 file_osa = "SPECTRUM_FOR_FROG.CSV"
 spec = osa.Data(path + file_osa, data_is_log=False)
 

@@ -41,6 +41,9 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
     AW = fft(AT)
     indwl = (pulse_ref.wl_um > 0).nonzero()[0]
     axs[1].plot(pulse_ref.wl_um[indwl], abs(AW[indwl]) ** 2)
+    ax = axs[1].twinx()
+    phase = np.unwrap(np.arctan2(AW[indwl].imag, AW[indwl].real))
+    ax.plot(pulse_ref.wl_um[indwl], phase, 'C1')
     axs[1].set_xlim(1., 2.)
     axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_ref.T, cmap='jet')
     axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_calc.T, cmap='jet')
@@ -518,9 +521,20 @@ ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # ret._data = ret._data[::-1]
 
 # %% set initial guess from power spectrum
-spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
+# spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
+# pulse = copy.deepcopy(ret.pulse)
+# pulse.set_AW_experiment(spectrum.x * 1e-3, np.sqrt(spectrum.y))
+# initial_guess = pulse.AT
+
+# %% or initial guess to be a phase retrieval result, but transform limited
+imag = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_imag_f_thz.txt")
+real = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_real_f_thz.txt")
+fthz = real[:, 0]
+real = real[:, 1]
+imag = imag[:, 1]
+AW = real + 1j * imag
 pulse = copy.deepcopy(ret.pulse)
-pulse.set_AW_experiment(spectrum.x * 1e-3, np.sqrt(spectrum.y))
+pulse.set_AW_experiment(sc.c * 1e6 / (fthz * 1e12), abs(AW))
 initial_guess = pulse.AT
 
 # %%
@@ -536,6 +550,7 @@ ret.retrieve(corr_for_pm=True, plot_update=True,
 # ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
 #              filter_um=None)
 
+# %%
 apply_filter(ret.AW_ret, 0.9, 2, ret.pulse)
 ret.AT_ret = ifft(ret.AW_ret)
 plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data,
