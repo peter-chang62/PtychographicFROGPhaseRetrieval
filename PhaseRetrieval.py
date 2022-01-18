@@ -8,6 +8,7 @@ from scipy.integrate import simps
 import matplotlib.pyplot as plt
 import pyfftw
 import PullDataFromOSA as osa
+import copy
 import clipboard_and_style_sheet
 
 bbo = BBO.BBOSHG()
@@ -347,7 +348,7 @@ class Retrieval:
                  start_time_fs=None,
                  end_time_fs=None,
                  plot_update=True,
-                 initial_guess=None,
+                 initial_guess_T_fs_AT=None,
                  filter_um=None):
 
         if corr_for_pm:
@@ -364,16 +365,16 @@ class Retrieval:
         if end_time_fs is None:
             end_time_fs = self.exp_T_fs[-1]
 
-        if initial_guess is None:
+        if initial_guess_T_fs_AT is None:
             # default to autocorrelation
-            initial_guess = np.sum(self._interp_data, axis=1)
-            initial_guess -= min(initial_guess)
+            initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
+            initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
 
-            self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess)
+            self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
 
         else:
             # initial guess generally can be complex
-            T_fs, field = initial_guess
+            T_fs, field = initial_guess_T_fs_AT
             self.pulse.set_AT_experiment(T_fs * 1e-3, field)
 
         # for incomplete spectrograms, the user can set a range of wavelengths to be used for phase retrieval. It's
@@ -427,6 +428,7 @@ class Retrieval:
 
         if plot_update:
             fig, (ax1, ax2) = plt.subplots(1, 2)
+            ax3 = ax2.twinx()
             ind_wl = (self.pulse.wl_um > 0).nonzero()
 
         error = self.calculate_error(self.AT2D,
@@ -495,8 +497,11 @@ class Retrieval:
             if plot_update:
                 ax1.clear()
                 ax2.clear()
+                ax3.clear()
                 ax1.plot(self.pulse.T_ps, abs(np.fft.fftshift(self.E_j)) ** 2)
                 ax2.plot(self.pulse.wl_um[ind_wl], abs(np.fft.fftshift(self.EW_j)[ind_wl]) ** 2)
+                phase = np.unwrap(np.arctan2(np.fft.fftshift(self.EW_j.imag), np.fft.fftshift(self.EW_j.real)))
+                ax3.plot(self.pulse.wl_um[ind_wl], phase[ind_wl], 'C1')
                 ax2.set_xlim(1, 2)
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
@@ -512,8 +517,20 @@ ret = Retrieval(maxiter=50)
 ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # ret._data = ret._data[::-1]
 
+# %% set initial guess from power spectrum
+spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
+pulse = copy.deepcopy(ret.pulse)
+pulse.set_AW_experiment(spectrum.x * 1e-3, np.sqrt(spectrum.y))
+initial_guess = pulse.AT
+
 # %%
-ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
+
+# ret.retrieve(corr_for_pm=True, plot_update=True,
+#              initial_guess_T_fs_AT=[pulse.T_ps * 1e3, initial_guess],
+#              filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2])
+
+ret.retrieve(corr_for_pm=True, plot_update=True,
+             initial_guess_T_fs_AT=None,
              filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2])
 
 # ret.retrieve(corr_for_pm=True, plot_update=True, initial_guess=None,
