@@ -331,7 +331,7 @@ class Retrieval:
 
     def correct_for_phase_match(self, length_um=50.,
                                 theta_pm_rad=bbo.phase_match_angle_rad(1.55),
-                                alpha_rad=BBO.deg_to_rad(3.5)):
+                                alpha_rad=np.arctan(.25 / 2)):
 
         if self.corrected_for_phase_matching:
             raise RuntimeWarning("already corrected for phase matching!")
@@ -341,9 +341,9 @@ class Retrieval:
                   theta_pm_rad=theta_pm_rad,
                   alpha_rad=alpha_rad)
 
-        ind = (self.exp_wl_nm > 440).nonzero()[0]
+        # ind = (self.exp_wl_nm > 440).nonzero()[0]
+        ind = (self.exp_wl_nm > 500).nonzero()[0]
         self.data[:, ind] /= R[ind]
-        # self.data[:] /= R
 
         self.corrected_for_phase_matching = True
 
