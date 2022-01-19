@@ -59,7 +59,8 @@ initial_guess = pr.ifft(pulse.AW)
 ret.retrieve(corr_for_pm=True,
              plot_update=True,
              initial_guess_T_fs_AT=None,
-             filter_um=None)
+             filter_um=[1.0, 1.9],
+             plot_wl_um=[1, 2])
 
 # %%
 pr.apply_filter(ret.AW_ret, 0.9, 2, ret.pulse)

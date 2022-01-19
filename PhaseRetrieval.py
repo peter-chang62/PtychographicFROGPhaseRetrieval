@@ -123,7 +123,7 @@ def ifft(x, axis=None):
 
 
 def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
-    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm)
+    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm, bounds_error=False, fill_value=0.0)
     return gridded(F_mks_output, T_fs_output)
 
 
@@ -143,7 +143,7 @@ def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
 
 
 class Retrieval:
-    def __init__(self, maxiter=100, time_window_ps=20., NPTS=2 ** 12):
+    def __init__(self, maxiter=100, time_window_ps=10., NPTS=2 ** 12):
         self._exp_T_fs = None
         self._exp_wl_nm = None
         self._data = None
@@ -354,7 +354,8 @@ class Retrieval:
                  initial_guess_T_fs_AT=None,
                  filter_um=None,
                  meas_spectrum_um=None,
-                 i_set_spectrum_to_meas=0):
+                 i_set_spectrum_to_meas=0,
+                 plot_wl_um=[1.0, 2.0]):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -530,9 +531,15 @@ class Retrieval:
                 ax2.plot(self.pulse.wl_um[ind_wl], abs(np.fft.fftshift(self.EW_j)[ind_wl]) ** 2)
                 phase = np.unwrap(np.arctan2(np.fft.fftshift(self.EW_j.imag), np.fft.fftshift(self.EW_j.real)))
                 ax3.plot(self.pulse.wl_um[ind_wl], phase[ind_wl], 'C1')
-                ax2.set_xlim(1.54, 1.58)
+                ax2.set_xlim(plot_wl_um[0], plot_wl_um[1])
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
-        self.AT_ret = np.fft.fftshift(self.Output_Ej[np.argmin(self.error[i_set_spectrum_to_meas:])])
-        self.AW_ret = np.fft.fftshift(self.Output_EWj[np.argmin(self.error[i_set_spectrum_to_meas:])])
+        self.error = self.error[i_set_spectrum_to_meas:]
+        self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
+        self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
+
+        bestind = np.argmin(self.error)
+
+        self.AT_ret = np.fft.fftshift(self.Output_Ej[bestind])
+        self.AW_ret = np.fft.fftshift(self.Output_EWj[bestind])
