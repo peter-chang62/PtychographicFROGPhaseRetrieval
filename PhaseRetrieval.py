@@ -51,10 +51,10 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
     axs[3].set_ylim(1, 2)
     axs[0].set_xlabel("T (ps)")
     axs[1].set_xlabel("$\mathrm{\mu m}$")
-    axs[2].set_xlabel("F (THz)")
-    axs[2].set_ylabel("T (fs)")
-    axs[3].set_xlabel("F (THz)")
-    axs[3].set_ylabel("T (fs)")
+    axs[2].set_xlabel("T (fs)")
+    axs[2].set_ylabel("wavelength ($\mathrm{\mu m}$)")
+    axs[3].set_xlabel("T (fs)")
+    axs[3].set_ylabel("wavelength ($\mathrm{\mu m}$)")
     axs[2].set_title("Experiment")
     axs[3].set_title("Retrieved")
     fig.suptitle("Error: " + '%.3f' % error)
@@ -143,7 +143,7 @@ def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
 
 
 class Retrieval:
-    def __init__(self, maxiter=100):
+    def __init__(self, maxiter=100, time_window_ps=20., NPTS=2 ** 12):
         self._exp_T_fs = None
         self._exp_wl_nm = None
         self._data = None
@@ -154,8 +154,8 @@ class Retrieval:
 
         self.pulse = fpn.Pulse(T0_ps=0.02,
                                center_wavelength_nm=1560.0,
-                               time_window_ps=10,
-                               NPTS=2 ** 12)
+                               time_window_ps=time_window_ps,
+                               NPTS=NPTS)
 
         self._rng = np.random.default_rng()
 
@@ -353,7 +353,8 @@ class Retrieval:
                  plot_update=True,
                  initial_guess_T_fs_AT=None,
                  filter_um=None,
-                 meas_spectrum_um=None):
+                 meas_spectrum_um=None,
+                 i_set_spectrum_to_meas=0):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -371,7 +372,7 @@ class Retrieval:
 
         if meas_spectrum_um is not None:
             wl_um, spectrum = meas_spectrum_um
-            aw = np.sqrt(spectrum)
+            aw = np.sqrt(abs(spectrum))
             self.pulse.set_AW_experiment(wl_um, aw)
             self.pulse.set_AT(ifft(self.pulse.AW))  # pynlo has ifft <-> fft defined in reverse
 
@@ -380,7 +381,10 @@ class Retrieval:
             if initial_guess_T_fs_AT is None:
                 # default to autocorrelation
                 initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
-                initial_guess_T_fs_AT[:] = (initial_guess_T_fs_AT[:] + initial_guess_T_fs_AT[::-1]) / 2
+
+                # interestingly enough, symmetrizing doesn't help
+                # initial_guess_T_fs_AT[:] = (initial_guess_T_fs_AT[:] + initial_guess_T_fs_AT[::-1]) / 2
+
                 initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
 
                 self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
@@ -493,7 +497,7 @@ class Retrieval:
                 self.fft_input[:] = self.E_j[:]
                 self.EW_j[:] = self.fft()
 
-                if (meas_spectrum_um is not None) and i > 10:
+                if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
                     self.amp[:] = meas_amp_interp[:]
                     self.phase[:] = np.arctan2(self.EW_j.imag, self.EW_j.real)
                     self.EW_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
@@ -526,9 +530,9 @@ class Retrieval:
                 ax2.plot(self.pulse.wl_um[ind_wl], abs(np.fft.fftshift(self.EW_j)[ind_wl]) ** 2)
                 phase = np.unwrap(np.arctan2(np.fft.fftshift(self.EW_j.imag), np.fft.fftshift(self.EW_j.real)))
                 ax3.plot(self.pulse.wl_um[ind_wl], phase[ind_wl], 'C1')
-                ax2.set_xlim(1, 2)
+                ax2.set_xlim(1.54, 1.58)
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
-        self.AT_ret = np.fft.fftshift(self.Output_Ej[np.argmin(self.error)])
-        self.AW_ret = np.fft.fftshift(self.Output_EWj[np.argmin(self.error)])
+        self.AT_ret = np.fft.fftshift(self.Output_Ej[np.argmin(self.error[i_set_spectrum_to_meas:])])
+        self.AW_ret = np.fft.fftshift(self.Output_EWj[np.argmin(self.error[i_set_spectrum_to_meas:])])
