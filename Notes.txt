@@ -1,0 +1,10 @@
+Differences between Henry's code and yours:
+
+1. He does the denoise feature stated in the Ptychographic paper
+
+2. He does not implement corr2 that is not stated in the paper but that is present in Sidorenko's source code.
+
+3. He shifts the peak of the pulse in the time domain back to T=0 (just use np.roll) after each iteration. 
+
+Other than that there are no major differences. Looking at Nazanin's paper, there are two notable things: the reconstruction error looks much smaller (the reconstructed FROG looks very close to the experimental one). She also does not appear to get any significant amount of light in the spectrogram that is around 500 nm, so I don't think that is a problem in yours. 
+
