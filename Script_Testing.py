@@ -12,8 +12,20 @@ import copy
 import clipboard_and_style_sheet
 import PhaseRetrieval as pr
 
+
+def correct_for_phase_matching(exp_wl_um, spctgm):
+    pulse_ref: fpn.Pulse
+
+    data_phasematching = np.genfromtxt("ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
+    wl, r = data_phasematching[:, 0], data_phasematching[:, 1]
+    r_gridded = spi.interp1d(wl, r)
+    ind = np.logical_and(exp_wl_um < min(wl), exp_wl_um > max(wl)).nonzero()[0]
+    r_ = r_gridded(exp_wl_um[ind])
+    spctgm[:, ind] /= r_
+
+
 # %%
-ret = pr.Retrieval(maxiter=50)
+ret = pr.Retrieval(maxiter=25, time_window_ps=10, NPTS=2 ** 12, center_wavelength_nm=1000.0)
 # ret.load_data("TestData/sanity_check_data.txt")
 # ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
 ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
@@ -23,7 +35,7 @@ ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # ret.data[:] = (ret.data[:] + ret.data[::-1]) / 2
 
 # %% set initial guess from power spectrum, doesn't work well
-# spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
+spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
 # pulse = copy.deepcopy(ret.pulse)
 # pulse.set_AW_experiment(spectrum.x * 1e-3, np.sqrt(spectrum.y))
 # initial_guess = pr.ifft(pulse.AW)
@@ -55,12 +67,21 @@ initial_guess = pr.ifft(pulse.AW)
 #              filter_um=[.500 * 2, ret.exp_wl_nm[-1] * 2],
 #              meas_spectrum_um=[sc.c * 1e6 / (fthz * 1e12), abs(AW) ** 2])
 
+p = fpn.Pulse(center_wavelength_nm=1560.)
+aw = p.AW
+
 # honest phase retrieval
-ret.retrieve(corr_for_pm=True,
+correct_for_phase_matching(ret.exp_wl_nm * 1e-3, ret.data)
+# ret.correct_for_phase_match(alpha_rad=np.arctan(.25 / 2))
+ind = (ret.exp_wl_nm < 500).nonzero()[0]
+ret.data[:, ind] = 0
+ret.retrieve(corr_for_pm=False,
              plot_update=True,
-             initial_guess_T_fs_AT=None,
-             filter_um=[1.0, 1.9],
-             plot_wl_um=[1, 2])
+             initial_guess_T_ps_AT=None,
+             initial_guess_wl_um_AW=[p.wl_um, aw],
+             filter_um=None,
+             plot_wl_um=[0., 2],
+             meas_spectrum_um=None)
 
 # %%
 pr.apply_filter(ret.AW_ret, 0.9, 2, ret.pulse)

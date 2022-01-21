@@ -127,6 +127,10 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
     return gridded(F_mks_output, T_fs_output)
 
 
+def denoise(x, gamma):
+    return np.where(x < gamma, 0.0, x - gamma * np.sign(x))
+
+
 def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
     pusle_ref: fpn.Pulse
 
@@ -143,7 +147,7 @@ def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
 
 
 class Retrieval:
-    def __init__(self, maxiter=100, time_window_ps=10., NPTS=2 ** 12):
+    def __init__(self, maxiter=100, time_window_ps=10., NPTS=2 ** 12, center_wavelength_nm=1560.):
         self._exp_T_fs = None
         self._exp_wl_nm = None
         self._data = None
@@ -153,11 +157,13 @@ class Retrieval:
         self.corrected_for_phase_matching = False
 
         self.pulse = fpn.Pulse(T0_ps=0.02,
-                               center_wavelength_nm=1560.0,
+                               center_wavelength_nm=center_wavelength_nm,
                                time_window_ps=time_window_ps,
                                NPTS=NPTS)
 
         self._rng = np.random.default_rng()
+
+        self.gamma = 1e-3  # does not appear to sensitive whether it's 1e-3 or down to 1e-6
 
     def shift1D(self, AT_to_shift, AW, AW_to_shift, dT_fs, V_THz):
         pulse_ref: fpn.Pulse
@@ -167,7 +173,7 @@ class Retrieval:
         self.fft_output[:] = AW_to_shift[:]
         AT_to_shift[:] = self.ifft()
 
-    def shift2D(self, AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, V_THz):
+    def shift2D(self, AW2D_to_shift, phase2D, dT_fs_vec, V_THz):
         pulse_ref: fpn.Pulse
 
         phase2D[:] = V_THz[:]
@@ -181,7 +187,7 @@ class Retrieval:
 
     def calculate_spctgm(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                          spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz):
-        self.shift2D(AT2D_to_shift, AW2D_to_shift, phase2D, dT_fs_vec, V_THz)
+        self.shift2D(AW2D_to_shift, phase2D, dT_fs_vec, V_THz)
 
         spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
 
@@ -226,7 +232,8 @@ class Retrieval:
         self._data = data[:, 1:][1:]
 
         # center T0
-        ind_max = np.unravel_index(np.argmax(self._data), self._data.shape)[0]
+        integral = simps(self._data, axis=1)
+        ind_max = np.argmax(integral)
         ind_center = len(self.exp_T_fs) // 2
         if ind_max < ind_center:
             diff = ind_center - ind_max
@@ -331,7 +338,7 @@ class Retrieval:
 
     def correct_for_phase_match(self, length_um=50.,
                                 theta_pm_rad=bbo.phase_match_angle_rad(1.55),
-                                alpha_rad=np.arctan(.25 / 2)):
+                                alpha_rad=BBO.deg_to_rad(3.5)):
 
         if self.corrected_for_phase_matching:
             raise RuntimeWarning("already corrected for phase matching!")
@@ -341,8 +348,8 @@ class Retrieval:
                   theta_pm_rad=theta_pm_rad,
                   alpha_rad=alpha_rad)
 
-        # ind = (self.exp_wl_nm > 440).nonzero()[0]
-        ind = (self.exp_wl_nm > 500).nonzero()[0]
+        ind = (self.exp_wl_nm > 440).nonzero()[0]
+        # ind = (self.exp_wl_nm > 530).nonzero()[0]
         self.data[:, ind] /= R[ind]
 
         self.corrected_for_phase_matching = True
@@ -351,7 +358,8 @@ class Retrieval:
                  start_time_fs=None,
                  end_time_fs=None,
                  plot_update=True,
-                 initial_guess_T_fs_AT=None,
+                 initial_guess_T_ps_AT=None,
+                 initial_guess_wl_um_AW=None,
                  filter_um=None,
                  meas_spectrum_um=None,
                  i_set_spectrum_to_meas=0,
@@ -379,21 +387,29 @@ class Retrieval:
 
         else:
 
-            if initial_guess_T_fs_AT is None:
+            if (initial_guess_T_ps_AT is None) and (initial_guess_wl_um_AW is None):
                 # default to autocorrelation
-                initial_guess_T_fs_AT = np.sum(self._interp_data, axis=1)
+                initial_guess_T_ps_AT = np.sum(self._interp_data, axis=1)
 
                 # interestingly enough, symmetrizing doesn't help
                 # initial_guess_T_fs_AT[:] = (initial_guess_T_fs_AT[:] + initial_guess_T_fs_AT[::-1]) / 2
 
-                initial_guess_T_fs_AT -= min(initial_guess_T_fs_AT)
+                initial_guess_T_ps_AT -= min(initial_guess_T_ps_AT)
 
-                self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_fs_AT)
+                self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_ps_AT)
+
+            elif (initial_guess_T_ps_AT is not None) and (initial_guess_wl_um_AW is not None):
+                raise RuntimeError("only one of initial_guess_T_fs_AT or initial_guess_wl_um_AW can be defined")
+
+            elif initial_guess_T_ps_AT is not None:
+                # initial guess generally can be complex
+                T_ps, field = initial_guess_T_ps_AT
+                self.pulse.set_AT_experiment(T_ps, field)
 
             else:
-                # initial guess generally can be complex
-                T_fs, field = initial_guess_T_fs_AT
-                self.pulse.set_AT_experiment(T_fs * 1e-3, field)
+                wl_um, field = initial_guess_wl_um_AW
+                self.pulse.set_AW_experiment(wl_um, field)
+                self.pulse.set_AT(ifft(self.pulse.AW))
 
         # for incomplete spectrograms, the user can set a range of wavelengths to be used for phase retrieval. It's
         # important to note that the indexing will be done for fftshifted arrays
@@ -481,6 +497,10 @@ class Retrieval:
                 self.amp[ind_filter_fftshift] = np.sqrt(interp_data_fftshift[int(j), ind_filter_fftshift])
                 self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
+                # denoise: significantly reduces the number of bad runs! Previously ~3/4 runs would converge quickly
+                # to unphysical spectra!
+                self.phi_j[:] = denoise(self.phi_j.real, self.gamma) + 1j * denoise(self.phi_j.imag, self.gamma)
+
                 self.fft_output[:] = self.phi_j[:]
                 self.psiPrime_j[:] = self.ifft()
 
@@ -494,7 +514,14 @@ class Retrieval:
 
                 self.shift1D(self.corr2, self.corr2W, self.corr2W, -dt, V_THz_fftshift)
 
-                self.E_j[:] += self.corr1 + self.corr2
+                # update time domain
+                self.E_j[:] += self.corr1  # + self.corr2
+
+                # keep time domain centered, doesn't seem necessary
+                ind_max = np.argmax(abs(self.E_j))
+                self.E_j[:] = np.roll(self.E_j, -ind_max)
+
+                # update frequency domain
                 self.fft_input[:] = self.E_j[:]
                 self.EW_j[:] = self.fft()
 

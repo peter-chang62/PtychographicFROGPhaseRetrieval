@@ -12,30 +12,37 @@ import copy
 import clipboard_and_style_sheet
 import PhaseRetrieval as pr
 
-# %%
-ret = pr.Retrieval(25, time_window_ps=40, NPTS=2 ** 14)
-ret.load_data("Data/01-18-2022/spectrogram_grating_pair_output.txt")
-# ret.data[:] = ret.data[::-1]
+
+def correct_for_phase_matching(exp_wl_um, spctgm):
+    pulse_ref: fpn.Pulse
+
+    data_phasematching = np.genfromtxt("ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
+    wl, r = data_phasematching[:, 0], data_phasematching[:, 1]
+    r_gridded = spi.interp1d(wl, r)
+    ind = np.logical_and(exp_wl_um < min(wl), exp_wl_um > max(wl)).nonzero()[0]
+    r_ = r_gridded(exp_wl_um[ind])
+    spctgm[:, ind] /= r_
+
 
 # %%
-ret.data[ret.data < 100] = 0.0
+ret = pr.Retrieval(25, time_window_ps=20)
+ret.load_data("Data/01-18-2022/spectrogram_grating_pair_output.txt")
+# ret.data[:] = ret.data[::-1]
 
 # %%
 spec = osa.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", data_is_log=False)
 
 # %%
 pulse = fpn.Pulse(.2, 1560, 10)
-at = pulse.AT
-tps = pulse.T_ps
 
 # %%
+# correct_for_phase_matching(ret.exp_wl_nm * 1e-3, ret.data)
 ret.retrieve(corr_for_pm=True,
              plot_update=True,
              meas_spectrum_um=[spec.x * 1e-3, spec.y],
-             filter_um=[1.54, 1.58],
-             i_set_spectrum_to_meas=10,
+             filter_um=[1.55, 1.575],
+             i_set_spectrum_to_meas=5,
              plot_wl_um=[1.54, 1.58])
-
 
 # %%
 spec = pr.calculate_spctgm(ret.AT_ret, ret.exp_T_fs, ret.pulse)
