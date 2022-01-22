@@ -25,7 +25,7 @@ def correct_for_phase_matching(exp_wl_um, spctgm):
 
 
 # %%
-ret = pr.Retrieval(maxiter=25, time_window_ps=10, NPTS=2 ** 12, center_wavelength_nm=1000.0)
+ret = pr.Retrieval(maxiter=25, time_window_ps=10, NPTS=2 ** 12, center_wavelength_nm=1100.0)
 # ret.load_data("TestData/sanity_check_data.txt")
 # ret.load_data("Data/01-14-2022/successfully_symmetric_frog.txt")
 ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
@@ -41,16 +41,16 @@ spectrum = osa.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
 # initial_guess = pr.ifft(pulse.AW)
 
 # %% or initial guess to be a phase retrieval result, but transform limited
-imag = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_imag_f_thz_2.txt")
-real = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_real_f_thz_2.txt")
-fthz = real[:, 0]
-real = real[:, 1]
-imag = imag[:, 1]
-AW = real + 1j * imag
-
-pulse = copy.deepcopy(ret.pulse)
-pulse.set_AW_experiment(sc.c * 1e6 / (fthz * 1e12), abs(AW))  # transform limited
-initial_guess = pr.ifft(pulse.AW)
+# imag = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_imag_f_thz_2.txt")
+# real = np.genfromtxt("Data/01-14-2022/retrieval_no_spec_real_f_thz_2.txt")
+# fthz = real[:, 0]
+# real = real[:, 1]
+# imag = imag[:, 1]
+# AW = real + 1j * imag
+#
+# pulse = copy.deepcopy(ret.pulse)
+# pulse.set_AW_experiment(sc.c * 1e6 / (fthz * 1e12), abs(AW))  # transform limited
+# initial_guess = pr.ifft(pulse.AW)
 
 # %%
 

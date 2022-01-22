@@ -59,6 +59,8 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
     axs[3].set_title("Retrieved")
     fig.suptitle("Error: " + '%.3f' % error)
 
+    return spctgm_calc
+
 
 def shift2D(AT2D, dT_fs_vec, pulse_ref):
     """
@@ -128,7 +130,7 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
 
 
 def denoise(x, gamma):
-    return np.where(x < gamma, 0.0, x - gamma * np.sign(x))
+    return np.where(abs(x) < gamma, 0.0, np.sign(x) * (abs(x) - gamma))
 
 
 def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
@@ -515,7 +517,7 @@ class Retrieval:
                 self.shift1D(self.corr2, self.corr2W, self.corr2W, -dt, V_THz_fftshift)
 
                 # update time domain
-                self.E_j[:] += self.corr1  # + self.corr2
+                self.E_j[:] += self.corr1 + self.corr2
 
                 # keep time domain centered, doesn't seem necessary
                 ind_max = np.argmax(abs(self.E_j))
