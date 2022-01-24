@@ -126,8 +126,12 @@ def scale_field_to_spctgm(AT, spctgm):
 
 
 def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
-    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm)
+    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm, bounds_error=False, fill_value=0.0)
     return gridded(F_mks_output, T_fs_output)
+
+
+def denoise(x, gamma):
+    return np.where(abs(x) < gamma, 0.0, np.sign(x) * (abs(x) - gamma))
 
 
 # %% Load the Data
@@ -192,7 +196,7 @@ pulse.set_AT(field)
 pulse.set_AT(scale_field_to_spctgm(pulse.AT, spctgm))
 
 # %% set up phase retrieval
-maxiter = 100
+maxiter = 25
 rng = np.random.default_rng()
 end_time = T_fs[-1]  # end time for retrieval time axis in fs
 ind_end_time = np.argmin((T_fs - end_time) ** 2)
@@ -234,7 +238,12 @@ for i in range(maxiter):
         phi_j[:] = fft(psi_j)
         phase[:] = np.arctan2(phi_j.imag, phi_j.real)
         amp[:] = np.sqrt(spctgm[int(j)])
-        phi_j[:] = amp * np.exp(1j * phase)
+        ind_nonzero = (amp > 0).nonzero()[0]
+        phi_j[ind_nonzero] = amp[ind_nonzero] * np.exp(1j * phase[ind_nonzero])
+
+        real = phi_j.real
+        imag = phi_j.imag
+        phi_j = denoise(real, 1e-3) + 1j * denoise(imag, 1e-3)
 
         psiPrime_j[:] = ifft(phi_j)
 

@@ -365,7 +365,8 @@ class Retrieval:
                  filter_um=None,
                  meas_spectrum_um=None,
                  i_set_spectrum_to_meas=0,
-                 plot_wl_um=[1.0, 2.0]):
+                 plot_wl_um=[1.0, 2.0],
+                 debug_plotting=False):
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -483,6 +484,10 @@ class Retrieval:
 
         print("initial error:", error)
 
+        if debug_plotting:
+            fig_debug, axs_debug = plt.subplots(2, 5)
+            axs_debug = axs_debug.flatten()
+
         for i in range(self.maxiter):
             self._rng.shuffle(time_order, axis=0)
             alpha = self._rng.uniform(low=0.1, high=0.5)
@@ -495,12 +500,16 @@ class Retrieval:
                 self.fft_input[:] = self.psi_j[:]
                 self.phi_j[:] = self.fft()
 
-                self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
+                self.amp[:] = 0
                 self.amp[ind_filter_fftshift] = np.sqrt(interp_data_fftshift[int(j), ind_filter_fftshift])
-                self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
+                ind_nonzero = (self.amp > 0).nonzero()[0]
 
-                # denoise: significantly reduces the number of bad runs! Previously ~3/4 runs would converge quickly
-                # to unphysical spectra!
+                self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
+                # only replace known parts of the spectrum
+                self.phi_j[ind_nonzero] = self.amp[ind_nonzero] * np.exp(1j * self.phase[ind_nonzero])
+                # self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
+
+                # denoise
                 self.phi_j[:] = denoise(self.phi_j.real, self.gamma) + 1j * denoise(self.phi_j.imag, self.gamma)
 
                 self.fft_output[:] = self.phi_j[:]
@@ -534,6 +543,33 @@ class Retrieval:
 
                     self.fft_output[:] = self.EW_j[:]
                     self.E_j[:] = self.ifft()
+
+                # temporary debugging
+                if debug_plotting:
+                    [i.clear() for i in axs_debug]
+                    axs_debug[0].plot(self.pulse.F_THz, abs(np.fft.fftshift(self.EW_j)) ** 2)
+                    axs_debug[1].plot(self.pulse.F_THz, abs(np.fft.fftshift(self.phi_j)))
+                    axs_debug[2].plot(self.pulse.F_THz, abs(fft(np.fft.fftshift(self.corr1))))
+                    axs_debug[3].plot(self.pulse.F_THz, abs(fft(np.fft.fftshift(self.corr2))))
+
+                    axs_debug[0].set_title("EW_j")
+                    axs_debug[1].set_title("phi_j after amp replacement")
+                    axs_debug[2].set_title("corr1 W")
+                    axs_debug[3].set_title("corr2 W")
+
+                    axs_debug[4].plot(self.pulse.T_ps, abs(np.fft.fftshift(self.E_j)) ** 2)
+                    axs_debug[5].plot(self.pulse.T_ps, abs(np.fft.fftshift(self.psi_j)))
+                    axs_debug[6].plot(self.pulse.T_ps, abs(np.fft.fftshift(self.psiPrime_j)))
+                    axs_debug[7].plot(self.pulse.T_ps, abs(np.fft.fftshift(self.corr1)))
+                    axs_debug[8].plot(self.pulse.T_ps, abs(np.fft.fftshift(self.corr2)))
+
+                    axs_debug[4].set_title("E_j")
+                    axs_debug[5].set_title("psi_j after amp replacement")
+                    axs_debug[6].set_title("psiPrime_j")
+                    axs_debug[7].set_title("corr2")
+                    axs_debug[8].set_title("corr2")
+
+                    plt.pause(.001)
 
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
