@@ -28,10 +28,11 @@ def normalize(vec):
 
 
 # %%
-ret = pr.Retrieval(maxiter=25, time_window_ps=80, NPTS=2 ** 15, center_wavelength_nm=1575.)
+ret = pr.Retrieval(maxiter=25, time_window_ps=20, NPTS=2 ** 14, center_wavelength_nm=1575.)
 # ret.load_data("TestData/sanity_check_data.txt")
 # ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
-ret.load_data("Data/01-18-2022/spectrogram_grating_pair_output.txt")
+# ret.load_data("Data/01-18-2022/spectrogram_grating_pair_output.txt")
+ret.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned.txt")
 
 # %%
 osa = OSA.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
@@ -40,7 +41,7 @@ osa = OSA.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
 ret.retrieve(corr_for_pm=True,
              plot_update=True,
              initial_guess_wl_um_AW=None,
-             plot_wl_um=[1.54, 1.58],
+             plot_wl_um=[1.54, 1.6],
              filter_um=[1.0, 1.8],
              debug_plotting=False
              )

@@ -236,7 +236,8 @@ class Retrieval:
         # center T0
         integral = simps(self._data, axis=1)
         ind_max = np.argmax(integral)
-        ind_center = len(self.exp_T_fs) // 2
+        ind_center = np.argmin(self.exp_T_fs ** 2)
+        # ind_center = len(self.exp_T_fs) // 2
         if ind_max < ind_center:
             diff = ind_center - ind_max
             self._data = self._data[:-diff]
