@@ -42,10 +42,10 @@ osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 
 # %%
 ret.retrieve(corr_for_pm=True,
-             plot_update=False,
+             plot_update=True,
              initial_guess_wl_um_AW=None,
              plot_wl_um=[1.54, 1.6],
-             filter_um=[1.0, 1.8],
+             filter_um=[1.53, 1.6],
              debug_plotting=False,
              meas_spectrum_um=[osa.x * 1e-3, osa.y],
              # meas_spectrum_um=None,
