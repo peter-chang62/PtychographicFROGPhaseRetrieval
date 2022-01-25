@@ -494,7 +494,7 @@ class Retrieval:
             alpha = self._rng.uniform(low=0.1, high=0.5)
             # alpha = abs(0.2 + self._rng.normal(0, 1) / 20)
 
-            for dt, j in time_order:
+            for n, (dt, j) in enumerate(time_order):
                 self.shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, V_THz_fftshift)
                 self.psi_j[:] = self.E_j[:] * self.Eshift_j[:]
 
@@ -546,7 +546,7 @@ class Retrieval:
                     self.E_j[:] = self.ifft()
 
                 # temporary debugging
-                if debug_plotting:
+                if debug_plotting and n % 10 == 0:
                     [i.clear() for i in axs_debug]
                     axs_debug[0].plot(self.pulse.F_THz, abs(np.fft.fftshift(self.EW_j)) ** 2)
                     axs_debug[1].plot(self.pulse.F_THz, abs(np.fft.fftshift(self.phi_j)))
@@ -569,6 +569,8 @@ class Retrieval:
                     axs_debug[6].set_title("psiPrime_j")
                     axs_debug[7].set_title("corr2")
                     axs_debug[8].set_title("corr2")
+
+                    fig_debug.suptitle('{n}/{N}'.format(n=n, N=len(time_order)))
 
                     plt.pause(.001)
 
