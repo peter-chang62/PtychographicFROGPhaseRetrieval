@@ -29,20 +29,67 @@ def normalize(vec):
 
 
 # %%
-osa_short = OSA.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
-osa_long = OSA.Data("Data/01-17-2022/SPECTRUM_HNLF_2um_OSA.CSV", False)
+# osa_short = OSA.Data("Data/01-17-2022/SPECTRUM_FOR_FROG.CSV", False)
+# osa_long = OSA.Data("Data/01-17-2022/SPECTRUM_HNLF_2um_OSA.CSV", False)
+#
+# gridded_short = spi.interp1d(osa_short.x, normalize(osa_short.y), bounds_error=False, fill_value=0.0)
+# gridded_long = spi.interp1d(osa_long.x, normalize(osa_long.y), bounds_error=False, fill_value=0.0)
+# wl = np.linspace(osa_short.x[0], osa_long.x[-1], 5000)
+#
+# specshort = gridded_short(wl)
+# speclong = gridded_long(wl)
+#
+# spec = np.where(wl < 1450, specshort, speclong)
+# window = tukey(4500, .15)
+# window = np.hstack((window, np.zeros(len(spec) - len(window))))
+# spec_windowed = spec * window
 
-gridded_short = spi.interp1d(osa_short.x, normalize(osa_short.y), bounds_error=False, fill_value=0.0)
-gridded_long = spi.interp1d(osa_long.x, normalize(osa_long.y), bounds_error=False, fill_value=0.0)
-wl = np.linspace(osa_short.x[0], osa_long.x[-1], 5000)
+# %%
+# clipboard_and_style_sheet.style_sheet()
+# plt.figure()
+# plt.plot(wl, spec_windowed)
+# plt.xlabel("wavelength (nm)")
 
-specshort = gridded_short(wl)
-speclong = gridded_long(wl)
-
-spec = np.where(wl < 1450, specshort, speclong)
-window = tukey(4500, .15)
-window = np.hstack((window, np.zeros(len(spec) - len(window))))
-spec_windowed = spec * window
-final = np.hstack((wl[:, np.newaxis], spec_windowed[:, np.newaxis]))
-
+# %%
+# final = np.hstack((wl[:, np.newaxis], spec_windowed[:, np.newaxis])
 # np.savetxt("Data/01-17-2022/Spectrum_Stitched_Together_wl_nm.txt", final)
+
+# %%
+center_wavelength_nm = 1560.
+time_window_ps = 10
+NPTS = 2 ** 14
+
+# %%
+ret = pr.Retrieval(maxiter=24,
+                   time_window_ps=time_window_ps,
+                   NPTS=NPTS,
+                   center_wavelength_nm=center_wavelength_nm)
+
+ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
+
+
+# %%
+
+class osa:
+    def __init__(self):
+        data = np.genfromtxt(
+            "Data/01-17-2022/Spectrum_Stitched_Together_wl_nm.txt"
+        )
+        self.wl_nm = data[:, 0]
+        self.wl_um = self.wl_nm * 1e-3
+        self.spectrum = data[:, 1]
+
+
+# %%
+ret.retrieve(corr_for_pm=True,
+             start_time_fs=None,
+             end_time_fs=None,
+             plot_update=True,
+             initial_guess_T_ps_AT=None,
+             initial_guess_wl_um_AW=None,
+             filter_um=None,
+             meas_spectrum_um=None,
+             i_set_spectrum_to_meas=0,
+             plot_wl_um=[1.0, 2.0],
+             debug_plotting=False
+             )

@@ -42,14 +42,17 @@ osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 
 # %%
 ret.retrieve(corr_for_pm=True,
-             plot_update=False,
+             start_time_fs=None,
+             end_time_fs=None,
+             plot_update=True,
+             initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
-             plot_wl_um=[1.54, 1.6],
              filter_um=[1.53, 1.6],
-             debug_plotting=False,
-             meas_spectrum_um=[osa.x * 1e-3, osa.y],
-             # meas_spectrum_um=None,
-             i_set_spectrum_to_meas=0
+             # meas_spectrum_um=[osa.x * 1e-3, osa.y],
+             meas_spectrum_um=None,
+             i_set_spectrum_to_meas=0,
+             plot_wl_um=[1.54, 1.6],
+             debug_plotting=False
              )
 
 # %%
@@ -66,10 +69,10 @@ ax[1].set_ylim(1.54, 1.58)
 fig.suptitle("%.4f" % min(ret.error))
 
 # %% save retrieval results
-fthz = ret.pulse.F_THz
-imag = ret.AW_ret.imag
-real = ret.AW_ret.real
-imag = np.hstack((fthz[:, np.newaxis], imag[:, np.newaxis]))
-real = np.hstack((fthz[:, np.newaxis], real[:, np.newaxis]))
-np.savetxt("Data/01-24-2022/consecutive_retrieval_attempts/fthz_imag_9.txt", imag)
-np.savetxt("Data/01-24-2022/consecutive_retrieval_attempts/fthz_real_9.txt", real)
+# fthz = ret.pulse.F_THz
+# imag = ret.AW_ret.imag
+# real = ret.AW_ret.real
+# imag = np.hstack((fthz[:, np.newaxis], imag[:, np.newaxis]))
+# real = np.hstack((fthz[:, np.newaxis], real[:, np.newaxis]))
+# np.savetxt("Data/01-24-2022/consecutive_retrieval_attempts/fthz_imag_9.txt", imag)
+# np.savetxt("Data/01-24-2022/consecutive_retrieval_attempts/fthz_real_9.txt", real)
