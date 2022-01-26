@@ -21,13 +21,20 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
+def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=None):
+    pulse_ref: fpn.Pulse
+
     if filter_um is not None:
         wl = pulse_ref.wl_um
         ll, ul = filter_um
         ind_filter = (np.logical_and(wl > ll, wl < ul)).nonzero()[0]
     else:
         ind_filter = np.arange(len(pulse_ref.wl_um))
+
+    if plot_um is None:
+        plot_um = [1, 2]
+
+    indwl = np.logical_and(pulse_ref.wl_um > plot_um[0], pulse_ref.wl_um < plot_um[-1]).nonzero()[0]
 
     spctgm_calc = calculate_spctgm(AT, dT_fs_vec, pulse_ref)
     num = np.sqrt(np.sum((spctgm_calc[:, ind_filter] - spctgm_ref[:, ind_filter]) ** 2))
@@ -37,18 +44,14 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
     fig, axs = plt.subplots(2, 2)
     axs = axs.flatten()
     pulse_ref: fpn.Pulse
-    axs[0].plot(pulse_ref.T_ps, abs(AT) ** 2)
+    axs[0].plot(pulse_ref.T_ps, normalize(abs(AT) ** 2))
     AW = fft(AT)
-    indwl = (pulse_ref.wl_um > 0).nonzero()[0]
-    axs[1].plot(pulse_ref.wl_um[indwl], abs(AW[indwl]) ** 2)
+    axs[1].plot(pulse_ref.wl_um[indwl], normalize(abs(AW[indwl]) ** 2))
     ax = axs[1].twinx()
     phase = np.unwrap(np.arctan2(AW[indwl].imag, AW[indwl].real))
     ax.plot(pulse_ref.wl_um[indwl], phase, 'C1')
-    axs[1].set_xlim(1., 2.)
-    axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_ref.T, cmap='jet')
-    axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um, spctgm_calc.T, cmap='jet')
-    axs[2].set_ylim(1, 2)
-    axs[3].set_ylim(1, 2)
+    axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_ref[:, indwl].T, cmap='jet')
+    axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_calc[:, indwl].T, cmap='jet')
     axs[0].set_xlabel("T (ps)")
     axs[1].set_xlabel("$\mathrm{\mu m}$")
     axs[2].set_xlabel("T (fs)")
@@ -59,7 +62,7 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None):
     axs[3].set_title("Retrieved")
     fig.suptitle("Error: " + '%.3f' % error)
 
-    return spctgm_calc
+    return spctgm_calc, fig, axs
 
 
 def shift2D(AT2D, dT_fs_vec, pulse_ref):
@@ -494,7 +497,8 @@ class Retrieval:
         if plot_update:
             fig, (ax1, ax2) = plt.subplots(1, 2)
             ax3 = ax2.twinx()
-            ind_wl = (self.pulse.wl_um > 0).nonzero()
+            ind_wl = np.logical_and(self.pulse.wl_um >= plot_wl_um[0], self.pulse.wl_um <= plot_wl_um[-1]).nonzero()[0]
+            # ind_wl = (self.pulse.wl_um > 0).nonzero()
 
         error = self.calculate_error(self.AT2D,
                                      self.AT2D_to_shift,
@@ -629,9 +633,9 @@ class Retrieval:
                 ax3.clear()
                 ax1.plot(self.pulse.T_ps, abs(np.fft.fftshift(self.E_j)) ** 2)
                 ax2.plot(self.pulse.wl_um[ind_wl], abs(np.fft.fftshift(self.EW_j)[ind_wl]) ** 2)
-                phase = np.unwrap(np.arctan2(np.fft.fftshift(self.EW_j.imag), np.fft.fftshift(self.EW_j.real)))
-                ax3.plot(self.pulse.wl_um[ind_wl], phase[ind_wl], 'C1')
-                ax2.set_xlim(plot_wl_um[0], plot_wl_um[1])
+                phase = np.unwrap(np.arctan2(np.fft.fftshift(self.EW_j.imag)[ind_wl],
+                                             np.fft.fftshift(self.EW_j.real)[ind_wl]))
+                ax3.plot(self.pulse.wl_um[ind_wl], phase, 'C1')
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 

@@ -43,7 +43,7 @@ osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 # %%
 ret.retrieve(corr_for_pm=True,
              start_time_fs=0,
-             end_time_fs=250,
+             end_time_fs=275,
              plot_update=True,
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
@@ -54,22 +54,12 @@ ret.retrieve(corr_for_pm=True,
              meas_spectrum_um=None,
              # i_set_spectrum_to_meas=10,
              i_set_spectrum_to_meas=0,
-             plot_wl_um=[1.5, 1.6],
+             plot_wl_um=[1.54, 1.58],
              debug_plotting=False
              )
 
 # %%
-p = fpn.Pulse(center_wavelength_nm=center_wavelength_nm, NPTS=2 ** 12, time_window_ps=40)
-p.set_AW_experiment(ret.pulse.wl_um, ret.AW_ret)
-AT = pr.ifft(p.AW)
-spctgm = pr.calculate_spctgm(AT, ret.exp_T_fs, p)
-
-fig, ax = plt.subplots(1, 2)
-ax[0].pcolormesh(ret.exp_T_fs, ret.exp_wl_nm * 1e-3 * 2, ret.data.T, cmap='jet')
-ax[0].set_ylim(1.54, 1.58)
-ax[1].pcolormesh(ret.exp_T_fs, p.wl_um, spctgm.T, cmap='jet')
-ax[1].set_ylim(1.54, 1.58)
-fig.suptitle("%.4f" % min(ret.error))
+spctgm, fig, axs = pr.plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data, plot_um=[1.54, 1.58])
 
 # %% save retrieval results
 # fthz = ret.pulse.F_THz
