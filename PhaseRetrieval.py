@@ -635,9 +635,10 @@ class Retrieval:
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
-        self.error = self.error[i_set_spectrum_to_meas:]
-        self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
-        self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
+        if meas_spectrum_um is not None:
+            self.error = self.error[i_set_spectrum_to_meas:]
+            self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
+            self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
 
         bestind = np.argmin(self.error)
 

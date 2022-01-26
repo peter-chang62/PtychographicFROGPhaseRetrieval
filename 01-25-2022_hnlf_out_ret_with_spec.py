@@ -88,17 +88,26 @@ osa = OSAClass()
 ret.retrieve(corr_for_pm=True,
              start_time_fs=0,
              end_time_fs=None,
-             plot_update=True,
+             plot_update=False,
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
              filter_um=None,
              forbidden_um=None,
-             meas_spectrum_um=[osa.wl_um, osa.spectrum],
-             # meas_spectrum_um=None,
-             i_set_spectrum_to_meas=10,
+             # meas_spectrum_um=[osa.wl_um, osa.spectrum],
+             meas_spectrum_um=None,
+             i_set_spectrum_to_meas=5,
              plot_wl_um=[0.8, 2.2],
              debug_plotting=False
              )
 
 # %%
 pr.plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)
+
+# %% save retrieval results
+fthz = ret.pulse.F_THz
+imag = ret.AW_ret.imag
+real = ret.AW_ret.real
+imag = np.hstack((fthz[:, np.newaxis], imag[:, np.newaxis]))
+real = np.hstack((fthz[:, np.newaxis], real[:, np.newaxis]))
+np.savetxt("Data/01-17-2022/consecutive_retrievals/fthz_imag_4.txt", imag)
+np.savetxt("Data/01-17-2022/consecutive_retrievals/fthz_real_4.txt", real)
