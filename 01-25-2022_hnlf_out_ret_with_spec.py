@@ -59,8 +59,10 @@ center_wavelength_nm = 1560.
 time_window_ps = 10
 NPTS = 2 ** 14
 
+maxiter = 25
+
 # %%
-ret = pr.Retrieval(maxiter=24,
+ret = pr.Retrieval(maxiter=maxiter,
                    time_window_ps=time_window_ps,
                    NPTS=NPTS,
                    center_wavelength_nm=center_wavelength_nm)
@@ -70,7 +72,7 @@ ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 
 # %%
 
-class osa:
+class OSAClass:
     def __init__(self):
         data = np.genfromtxt(
             "Data/01-17-2022/Spectrum_Stitched_Together_wl_nm.txt"
@@ -80,16 +82,23 @@ class osa:
         self.spectrum = data[:, 1]
 
 
+osa = OSAClass()
+
 # %%
 ret.retrieve(corr_for_pm=True,
-             start_time_fs=None,
+             start_time_fs=0,
              end_time_fs=None,
              plot_update=True,
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
              filter_um=None,
-             meas_spectrum_um=None,
-             i_set_spectrum_to_meas=0,
-             plot_wl_um=[1.0, 2.0],
+             forbidden_um=None,
+             meas_spectrum_um=[osa.wl_um, osa.spectrum],
+             # meas_spectrum_um=None,
+             i_set_spectrum_to_meas=10,
+             plot_wl_um=[0.8, 2.2],
              debug_plotting=False
              )
+
+# %%
+pr.plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data)

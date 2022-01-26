@@ -364,10 +364,30 @@ class Retrieval:
                  initial_guess_T_ps_AT=None,
                  initial_guess_wl_um_AW=None,
                  filter_um=None,
+                 forbidden_um=None,
                  meas_spectrum_um=None,
                  i_set_spectrum_to_meas=0,
                  plot_wl_um=[1.0, 2.0],
                  debug_plotting=False):
+
+        """
+        :param corr_for_pm:
+        :param start_time_fs:
+        :param end_time_fs:
+        :param plot_update:
+        :param initial_guess_T_ps_AT:
+        :param initial_guess_wl_um_AW:
+        :param filter_um:
+
+        :param forbidden_um: brick wall filter after each iteration, I'll leave it here since I already wrote it but
+        generally it's not a good idea, unless you implement some sort of window to avoid edges from developing
+
+        :param meas_spectrum_um:
+        :param i_set_spectrum_to_meas:
+        :param plot_wl_um:
+        :param debug_plotting:
+        :return:
+        """
 
         if corr_for_pm:
             # make sure to correct for phase matching
@@ -420,11 +440,15 @@ class Retrieval:
         wl_um_fftshift = np.fft.ifftshift(self.pulse.wl_um)
         if filter_um is not None:
             ll_um, ul_um = filter_um
-            ind_filter_fftshift = (np.logical_and(wl_um_fftshift > ll_um, wl_um_fftshift < ul_um)).nonzero()[0]
+            ind_filter_fftshift = np.logical_and(wl_um_fftshift > ll_um, wl_um_fftshift < ul_um).nonzero()[0]
 
         else:
             # in this case array[ind_filter_fftshift] = array[:]
             ind_filter_fftshift = np.arange(len(wl_um_fftshift))
+
+        if forbidden_um is not None:
+            ll_um, ul_um = forbidden_um
+            ind_forbidden_fftshift = np.logical_or(wl_um_fftshift <= ll_um, wl_um_fftshift >= ul_um).nonzero()[0]
 
         """fftshift everything before fft's are calculated 
         
@@ -541,6 +565,14 @@ class Retrieval:
                     self.amp[:] = meas_amp_interp[:]
                     self.phase[:] = np.arctan2(self.EW_j.imag, self.EW_j.real)
                     self.EW_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
+
+                    self.fft_output[:] = self.EW_j[:]
+                    self.E_j[:] = self.ifft()
+
+                # do not apply filter if power spectrum is known
+                elif forbidden_um is not None:
+                    # power is not allowed at these wavelengths (brick wall filter)
+                    self.EW_j[ind_forbidden_fftshift] = 0.0
 
                     self.fft_output[:] = self.EW_j[:]
                     self.E_j[:] = self.ifft()

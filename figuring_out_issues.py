@@ -42,16 +42,19 @@ osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 
 # %%
 ret.retrieve(corr_for_pm=True,
-             start_time_fs=None,
-             end_time_fs=None,
+             start_time_fs=0,
+             end_time_fs=250,
              plot_update=True,
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
-             filter_um=[1.53, 1.6],
+             # filter_um=[1.5, 1.6],
+             filter_um=None,
+             forbidden_um=None,
              # meas_spectrum_um=[osa.x * 1e-3, osa.y],
              meas_spectrum_um=None,
+             # i_set_spectrum_to_meas=10,
              i_set_spectrum_to_meas=0,
-             plot_wl_um=[1.54, 1.6],
+             plot_wl_um=[1.5, 1.6],
              debug_plotting=False
              )
 
