@@ -21,7 +21,7 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=None):
+def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=(1, 2)):
     pulse_ref: fpn.Pulse
 
     if filter_um is not None:
@@ -30,9 +30,6 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_
         ind_filter = (np.logical_and(wl > ll, wl < ul)).nonzero()[0]
     else:
         ind_filter = np.arange(len(pulse_ref.wl_um))
-
-    if plot_um is None:
-        plot_um = [1, 2]
 
     indwl = np.logical_and(pulse_ref.wl_um > plot_um[0], pulse_ref.wl_um < plot_um[-1]).nonzero()[0]
 
@@ -339,7 +336,7 @@ class Retrieval:
     @property
     def interp_data(self):
         if self._interp_data is None:
-            raise ValueError("no data loaded yet")
+            raise ValueError("no data interpolated onto simulation grid yet")
         return self._interp_data
 
     def correct_for_phase_match(self, length_um=50.,
