@@ -6,98 +6,15 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.interpolate as spi
 from scipy.integrate import simps
 import matplotlib.pyplot as plt
-import pyfftw
-import PullDataFromOSA as osa
+import PullDataFromOSA as OSA
 import copy
 import clipboard_and_style_sheet
-
-bbo = BBO.BBOSHG()
+import PhaseRetrieval as pr
+import mkl_fft
 
 
 def normalize(vec):
-    """
-    normalize a numpy array
-    """
     return vec / np.max(abs(vec))
-
-
-def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=(1, 2)):
-    pulse_ref: fpn.Pulse
-
-    if filter_um is not None:
-        wl = pulse_ref.wl_um
-        ll, ul = filter_um
-        ind_filter = (np.logical_and(wl > ll, wl < ul)).nonzero()[0]
-    else:
-        ind_filter = np.arange(len(pulse_ref.wl_um))
-
-    spctgm_calc = calculate_spctgm(AT, dT_fs_vec, pulse_ref)
-    num = np.sqrt(np.sum((spctgm_calc[:, ind_filter] - spctgm_ref[:, ind_filter]) ** 2))
-    denom = np.sqrt(np.sum(abs(spctgm_ref[:, ind_filter]) ** 2))
-    error = num / denom
-
-    indwl = np.logical_and(pulse_ref.wl_um > plot_um[0], pulse_ref.wl_um < plot_um[-1]).nonzero()[0]
-
-    fig, axs = plt.subplots(2, 2)
-    axs = axs.flatten()
-    pulse_ref: fpn.Pulse
-    axs[0].plot(pulse_ref.T_ps, normalize(abs(AT) ** 2))
-    AW = fft(AT)
-    axs[1].plot(pulse_ref.wl_um[indwl], normalize(abs(AW[indwl]) ** 2))
-    ax = axs[1].twinx()
-    phase = np.unwrap(np.arctan2(AW[indwl].imag, AW[indwl].real))
-    ax.plot(pulse_ref.wl_um[indwl], phase, 'C1')
-    axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_ref[:, indwl].T, cmap='jet')
-    axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_calc[:, indwl].T, cmap='jet')
-    axs[0].set_xlabel("T (ps)")
-    axs[1].set_xlabel("$\mathrm{\mu m}$")
-    axs[2].set_xlabel("T (fs)")
-    axs[2].set_ylabel("wavelength ($\mathrm{\mu m}$)")
-    axs[3].set_xlabel("T (fs)")
-    axs[3].set_ylabel("wavelength ($\mathrm{\mu m}$)")
-    axs[2].set_title("Experiment")
-    axs[3].set_title("Retrieved")
-    fig.suptitle("Error: " + '%.3f' % error)
-
-    return spctgm_calc, fig, axs
-
-
-def shift2D(AT2D, dT_fs_vec, pulse_ref):
-    """
-    :param AT2D: complex 2D array, electric fields in time domain are row indexed
-    :param dT_fs_vec: 1D numpy array, time shift in femtoseconds for each E-field (row) in AT2D
-    :param pulse_ref: reference pulse for the frequency axis
-    :return: shifted AT2D, each E-field (row) has been shifted by amounts specified in dT_fs_vec
-    """
-
-    pulse_ref: fpn.Pulse
-    AW2D = fft(AT2D, axis=1)
-    dT_ps_vec = dT_fs_vec * 1e-3
-
-    phase = np.zeros(AW2D.shape, dtype=np.complex128)
-    phase[:] = pulse_ref.V_THz
-    phase *= 1j * dT_ps_vec[:, np.newaxis]
-    phase = np.exp(phase)
-
-    AW2D *= phase
-    return ifft(AW2D, axis=1)
-
-
-def calculate_spctgm(AT, dT_fs_vec, pulse_ref):
-    """
-    :param AT: 1D complex array, electric-field in time domain
-    :param dT_fs_vec: delay time axis in femtoseconds
-    :param pulse_ref: reference pulse for frequency axis
-    :return: calculated spectrogram, time delay is row indexed, and frequency is column indexed
-    """
-
-    AT2D = np.zeros((len(dT_fs_vec), len(AT)), dtype=np.complex128)
-    AT2D[:] = AT
-    AT2D_shift = shift2D(AT2D, dT_fs_vec, pulse_ref)
-
-    spectrogram = AT2D * AT2D_shift
-    spectrogram = abs(fft(spectrogram, axis=1)) ** 2
-    return spectrogram
 
 
 def fft(x, axis=None):
@@ -107,9 +24,9 @@ def fft(x, axis=None):
     """
 
     if axis is None:
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
+        return np.fft.fftshift(mkl_fft.fft(np.fft.ifftshift(x)))
     else:
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
+        return np.fft.fftshift(mkl_fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
 
 
 def ifft(x, axis=None):
@@ -119,243 +36,18 @@ def ifft(x, axis=None):
     """
 
     if axis is None:
-        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x)))
+        return np.fft.fftshift(mkl_fft.ifft(np.fft.ifftshift(x)))
     else:
-        return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
-
-
-def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_output, spctgm):
-    gridded = spi.interp2d(F_mks_input, T_fs_input, spctgm, bounds_error=False, fill_value=0.0)
-    return gridded(F_mks_output, T_fs_output)
+        return np.fft.fftshift(mkl_fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
 
 
 def denoise(x, gamma):
     return np.where(abs(x) < gamma, 0.0, np.sign(x) * (abs(x) - gamma))
 
 
-def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
-    pusle_ref: fpn.Pulse
-
-    if fftshift:
-        wl = np.fft.fftshift(pulse_ref.wl_um)
-    else:
-        wl = pulse_ref.wl_um
-
-    ind_ll = (wl < ll_um).nonzero()[0]
-    ind_ul = (wl > ul_um).nonzero()[0]
-
-    AW[ind_ll] = 0.0
-    AW[ind_ul] = 0.0
-
-
-class Retrieval:
-    def __init__(self, maxiter=100, time_window_ps=10., NPTS=2 ** 12, center_wavelength_nm=1560.):
-        self._exp_T_fs = None
-        self._exp_wl_nm = None
-        self._data = None
-        self._interp_data = None
-        self.maxiter = maxiter
-
-        self.corrected_for_phase_matching = False
-
-        self.pulse = fpn.Pulse(T0_ps=0.02,
-                               center_wavelength_nm=center_wavelength_nm,
-                               time_window_ps=time_window_ps,
-                               NPTS=NPTS)
-
-        self._rng = np.random.default_rng()
-
-        self.gamma = 1e-3  # does not appear to sensitive whether it's 1e-3 or down to 1e-6
-
-    def shift1D(self, AT_to_shift, AW, AW_to_shift, dT_fs, V_THz):
-        pulse_ref: fpn.Pulse
-
-        AW_to_shift[:] = AW[:] * np.exp(1j * V_THz[:] * dT_fs * 1e-3)
-
-        self.fft_output[:] = AW_to_shift[:]
-        AT_to_shift[:] = self.ifft()
-
-    def shift2D(self, AW2D_to_shift, phase2D, dT_fs_vec, V_THz):
-        pulse_ref: fpn.Pulse
-
-        phase2D[:] = V_THz[:]
-        phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
-        phase2D[:] = np.exp(phase2D[:])
-
-        AW2D_to_shift[:] *= phase2D[:]
-
-        self.fft2_output[:] = AW2D_to_shift[:]
-        self.AT2D_to_shift[:] = self.ifft2()
-
-    def calculate_spctgm(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                         spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz):
-        self.shift2D(AW2D_to_shift, phase2D, dT_fs_vec, V_THz)
-
-        spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
-
-        self.fft2_input[:] = spctgm_to_calc_Tdomain[:]
-        self.spctgm_to_calc_Wdomain[:] = self.fft2()
-
-        spctgm_to_calc_Wdomain[:] *= spctgm_to_calc_Wdomain.conj()
-
-    def calculate_error(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                        spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz, spctgm_ref,
-                        ind_filter):
-
-        self.calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
-                              spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz)
-
-        num = np.sqrt(np.sum((spctgm_to_calc_Wdomain.real[:, ind_filter] - spctgm_ref[:, ind_filter]) ** 2))
-        denom = np.sqrt(np.sum(spctgm_ref[:, ind_filter] ** 2))
-        return num / denom
-
-    def scale_field_to_spctgm(self, AT, spctgm):
-        """
-        :param AT: 1D complex array, electric-field in time domain
-        :param spctgm: reference spectrogram
-        :return: 1D complex arrray, AT scaled to the correct power for the reference spectrogram
-        """
-
-        AW2 = np.zeros(AT.shape, AT.dtype)
-
-        self.fft_input[:] = AT[:] ** 2
-        AW2[:] = self.fft()
-
-        power_AW2 = simps(abs(AW2) ** 2)
-        spctgm_fftshift = np.fft.ifftshift(spctgm, axes=0)
-        power_spctgm = simps(spctgm_fftshift[0])
-        scale_power = (power_spctgm / power_AW2) ** 0.25
-        return AT * scale_power
-
-    def load_data(self, path_to_data):
-        data = np.genfromtxt(path_to_data)
-        self._exp_T_fs = data[:, 0][1:]
-        self._exp_wl_nm = data[0][1:]
-        self._data = data[:, 1:][1:]
-
-        # center T0
-        integral = simps(self._data, axis=1)
-        ind_max = np.argmax(integral)
-        ind_center = np.argmin(self.exp_T_fs ** 2)
-        # ind_center = len(self.exp_T_fs) // 2
-        if ind_max < ind_center:
-            diff = ind_center - ind_max
-            self._data = self._data[:-diff]
-            self._exp_T_fs = self.exp_T_fs[diff:]
-
-        elif ind_max > ind_center:
-            diff = ind_max - ind_center
-            self._data = self._data[diff:]
-            self._exp_T_fs = self.exp_T_fs[:-diff]
-
-        # reset certain variables: have not yet corrected for phase matching
-        # make sure to re-interpolate the data to the sim grid
-        self.corrected_for_phase_matching = False
-        del self._interp_data
-        gc.collect()
-        self._interp_data = None
-
-    def setup_retrieval_arrays(self, delay_time):
-
-        # 1D arrays
-        self.E_j = np.zeros(self.pulse.AT.shape, dtype=self.pulse.AT.dtype)
-        self.EW_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.Eshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.EWshift_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.corr1 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.corr2 = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.corr2W = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.psi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.psiPrime_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.phi_j = np.zeros(self.E_j.shape, dtype=self.E_j.dtype)
-        self.phase = np.zeros(self.E_j.shape)
-        self.amp = np.zeros(self.E_j.shape)
-
-        self.error = np.zeros(self.maxiter)
-
-        # 2D arrays
-        self.Output_Ej = np.zeros((self.maxiter, len(self.E_j)), dtype=self.E_j.dtype)
-        self.Output_EWj = np.zeros((self.maxiter, len(self.E_j)), dtype=self.E_j.dtype)
-
-        self.AT2D = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-        self.AT2D_to_shift = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-        self.AW2D_to_shift = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-        self.spctgm_to_calc_Tdomain = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-        self.spctgm_to_calc_Wdomain = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-        self.phase2D = np.zeros((len(delay_time), len(self.E_j)), dtype=np.complex128)
-
-        # 1D fft arrays
-        self.fft_input = pyfftw.empty_aligned(self.E_j.shape, dtype='complex128')
-        self.fft_output = pyfftw.empty_aligned(self.E_j.shape, dtype='complex128')
-
-        # 2D fft arrays
-        self.fft2_input = pyfftw.empty_aligned(self.AT2D.shape, dtype='complex128')
-        self.fft2_output = pyfftw.empty_aligned(self.AT2D.shape, dtype='complex128')
-
-        # 1D fft
-        self.fft = pyfftw.FFTW(self.fft_input, self.fft_output, axes=[0], direction='FFTW_FORWARD',
-                               flags=["FFTW_MEASURE"])
-        self.ifft = pyfftw.FFTW(self.fft_output, self.fft_input, axes=[0], direction='FFTW_BACKWARD',
-                                flags=["FFTW_MEASURE"])
-
-        # 2D fft
-        self.fft2 = pyfftw.FFTW(self.fft2_input, self.fft2_output, axes=[1], direction='FFTW_FORWARD',
-                                flags=["FFTW_MEASURE"])
-        self.ifft2 = pyfftw.FFTW(self.fft2_output, self.fft2_input, axes=[1], direction='FFTW_BACKWARD',
-                                 flags=["FFTW_MEASURE"])
-
-    def interpolate_data_to_sim_grid(self):
-        self._interp_data = interpolate_spctgm_to_grid(F_mks_input=self.exp_F_mks,
-                                                       F_mks_output=self.pulse.F_mks * 2,
-                                                       T_fs_input=self.exp_T_fs,
-                                                       T_fs_output=self.exp_T_fs,
-                                                       spctgm=self.data)
-
-    @property
-    def exp_T_fs(self):
-        if self._exp_T_fs is None:
-            raise ValueError("no data loaded yet")
-        return self._exp_T_fs
-
-    @property
-    def exp_wl_nm(self):
-        if self._exp_wl_nm is None:
-            raise ValueError("no data loaded yet")
-        return self._exp_wl_nm
-
-    @property
-    def data(self):
-        if self._data is None:
-            raise ValueError("no data loaded yet")
-        return self._data
-
-    @property
-    def exp_F_mks(self):
-        return sc.c / (self.exp_wl_nm * 1e-9)
-
-    @property
-    def interp_data(self):
-        if self._interp_data is None:
-            raise ValueError("no data interpolated onto simulation grid yet")
-        return self._interp_data
-
-    def correct_for_phase_match(self, length_um=50.,
-                                theta_pm_rad=bbo.phase_match_angle_rad(1.55),
-                                alpha_rad=BBO.deg_to_rad(3.5)):
-
-        if self.corrected_for_phase_matching:
-            raise RuntimeWarning("already corrected for phase matching!")
-
-        R = bbo.R(wl_um=self.exp_wl_nm * 1e-3 * 2,  # fundamental wavelength
-                  length_um=length_um,  # crystal thickness
-                  theta_pm_rad=theta_pm_rad,
-                  alpha_rad=alpha_rad)
-
-        ind = (self.exp_wl_nm > 440).nonzero()[0]
-        # ind = (self.exp_wl_nm > 530).nonzero()[0]
-        self.data[:, ind] /= R[ind]
-
-        self.corrected_for_phase_matching = True
+class Retrieval(pr.Retrieval):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def retrieve(self, corr_for_pm=True,
                  start_time_fs=None,
@@ -451,13 +143,13 @@ class Retrieval:
             ind_forbidden_fftshift = np.logical_or(wl_um_fftshift <= ll_um, wl_um_fftshift >= ul_um).nonzero()[0]
 
         """fftshift everything before fft's are calculated 
-        
+
         The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts 
         everything that follows 
-        
+
         The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
         also needs to be fftshifted 
-        
+
         Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be 
         fftshifted """
 
@@ -472,6 +164,14 @@ class Retrieval:
         ind_end = np.argmin((self.exp_T_fs - end_time_fs) ** 2)
         self.delay_time = self.exp_T_fs[ind_start:ind_end]
         time_order = np.array([*zip(self.delay_time, np.arange(ind_start, ind_end))])
+
+        # only used if meas_spectrum_um is not None
+        if meas_spectrum_um is not None:
+            h_meas_spectrum = np.linspace(.001, 1, 10)
+            h_meas_spectrum = np.repeat(h_meas_spectrum[:, np.newaxis], 5, 1).flatten()
+
+            self.maxiter = i_set_spectrum_to_meas + len(h_meas_spectrum) - 1
+            print(f'maxiter has been adjusted to {self.maxiter}')
 
         # initialize the arrays to zeros
         self.setup_retrieval_arrays(self.delay_time)
@@ -489,7 +189,6 @@ class Retrieval:
         self.AW2D_to_shift[:] = self.EW_j[:]
 
         if meas_spectrum_um is not None:
-            # already fftshifted
             meas_amp_interp = abs(self.EW_j)
 
         if plot_update:
@@ -564,7 +263,12 @@ class Retrieval:
                 self.EW_j[:] = self.fft()
 
                 if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
-                    self.amp[:] = meas_amp_interp[:]
+                    if i == i_set_spectrum_to_meas:
+                        starting_field = abs(self.EW_j)
+                        diff = meas_amp_interp - starting_field
+                        h = 0
+
+                    self.amp[:] = starting_field + diff * h_meas_spectrum[h]
                     self.phase[:] = np.arctan2(self.EW_j.imag, self.EW_j.real)
                     self.EW_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
@@ -608,6 +312,10 @@ class Retrieval:
 
                     plt.pause(.001)
 
+            if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
+                h += 1
+                # print(h)
+
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
             error = self.calculate_error(self.AT2D,
@@ -637,12 +345,62 @@ class Retrieval:
                 fig.suptitle("iteration " + str(i) + "; error: " + "%.3f" % self.error[i])
                 plt.pause(.001)
 
-        if meas_spectrum_um is not None:
-            self.error = self.error[i_set_spectrum_to_meas:]
-            self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
-            self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
+        # if meas_spectrum_um is not None:
+        #     self.error = self.error[i_set_spectrum_to_meas:]
+        #     self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
+        #     self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
 
-        bestind = np.argmin(self.error)
+        if meas_spectrum_um is not None:
+            bestind = -1
+        else:
+            bestind = np.argmin(self.error)
 
         self.AT_ret = np.fft.fftshift(self.Output_Ej[bestind])
         self.AW_ret = np.fft.fftshift(self.Output_EWj[bestind])
+
+
+# %%
+center_wavelength_nm = 1560.
+maxiter = 25
+time_window_ps = 80
+NPTS = 2 ** 15
+
+ret = Retrieval(maxiter=25,
+                time_window_ps=time_window_ps,
+                NPTS=NPTS,
+                center_wavelength_nm=center_wavelength_nm)
+
+# %%
+ret.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
+osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", data_is_log=False)
+
+# %% retrieval without measured power spectrum
+# ret.retrieve(corr_for_pm=True,
+#              start_time_fs=0,
+#              end_time_fs=275,
+#              plot_update=True,
+#              initial_guess_T_ps_AT=None,
+#              initial_guess_wl_um_AW=None,
+#              filter_um=None,
+#              forbidden_um=None,
+#              meas_spectrum_um=None,
+#              i_set_spectrum_to_meas=0,
+#              plot_wl_um=[1.54, 1.58],
+#              debug_plotting=False)
+
+# %% retrieval with measured power spectrum
+ret.retrieve(corr_for_pm=True,
+             start_time_fs=-275,
+             end_time_fs=275,
+             plot_update=True,
+             initial_guess_T_ps_AT=None,
+             initial_guess_wl_um_AW=None,
+             filter_um=None,
+             forbidden_um=None,
+             meas_spectrum_um=[osa.x * 1e-3, osa.y],
+             i_set_spectrum_to_meas=10,
+             plot_wl_um=[1.54, 1.58],
+             debug_plotting=False)
+
+# %%
+spctgm, fig, axs = pr.plot_ret_results(ret.AT_ret, ret.exp_T_fs, ret.pulse, ret.interp_data, plot_um=[1.54, 1.58])
