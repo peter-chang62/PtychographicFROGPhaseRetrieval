@@ -28,7 +28,7 @@ def normalize(vec):
 
 
 # %%
-center_wavelength_nm = 1560.
+center_wavelength_nm = 1563.
 
 # %%
 ret = pr.Retrieval(maxiter=25, time_window_ps=80, NPTS=2 ** 15, center_wavelength_nm=center_wavelength_nm)
@@ -47,12 +47,9 @@ ret.retrieve(corr_for_pm=True,
              plot_update=True,
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
-             # filter_um=[1.5, 1.6],
              filter_um=None,
              forbidden_um=None,
-             # meas_spectrum_um=[osa.x * 1e-3, osa.y],
              meas_spectrum_um=None,
-             # i_set_spectrum_to_meas=10,
              i_set_spectrum_to_meas=0,
              plot_wl_um=[1.54, 1.58],
              debug_plotting=False

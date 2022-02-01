@@ -10,6 +10,7 @@ import pyfftw
 import PullDataFromOSA as osa
 import copy
 import clipboard_and_style_sheet
+from scipy.signal.windows import tukey
 
 bbo = BBO.BBOSHG()
 
@@ -448,7 +449,14 @@ class Retrieval:
 
         if forbidden_um is not None:
             ll_um, ul_um = forbidden_um
-            ind_forbidden_fftshift = np.logical_or(wl_um_fftshift <= ll_um, wl_um_fftshift >= ul_um).nonzero()[0]
+            wl_um = self.pulse.wl_um
+
+            ind_allowed = np.logical_and(wl_um >= ll_um, wl_um <= ul_um).nonzero()[0]
+            window_forbidden = tukey(len(ind_allowed), alpha=0.25)
+            window_forbidden = np.pad(window_forbidden, (ind_allowed[0], len(wl_um) - 1 - ind_allowed[-1]),
+                                      constant_values=0.0)
+
+            window_forbidden = np.fft.fftshift(window_forbidden)
 
         """fftshift everything before fft's are calculated 
         
@@ -573,8 +581,8 @@ class Retrieval:
 
                 # do not apply filter if power spectrum is known
                 elif forbidden_um is not None:
-                    # power is not allowed at these wavelengths (brick wall filter)
-                    self.EW_j[ind_forbidden_fftshift] = 0.0
+                    # power is not allowed at these wavelengths (filter them out!)
+                    self.EW_j *= window_forbidden
 
                     self.fft_output[:] = self.EW_j[:]
                     self.E_j[:] = self.ifft()
