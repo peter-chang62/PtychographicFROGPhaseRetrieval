@@ -45,13 +45,14 @@ ret.retrieve(corr_for_pm=True,
              start_time_fs=0,
              end_time_fs=275,
              plot_update=True,
+             plot_wl_um=[1.54, 1.58],
              initial_guess_T_ps_AT=None,
              initial_guess_wl_um_AW=None,
              filter_um=None,
              forbidden_um=None,
-             meas_spectrum_um=None,
-             i_set_spectrum_to_meas=0,
-             plot_wl_um=[1.54, 1.58],
+             meas_spectrum_um=[osa.x * 1e-3, osa.y],
+             grad_ramp_for_meas_spectrum=False,
+             i_set_spectrum_to_meas=5,
              debug_plotting=False
              )
 

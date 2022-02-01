@@ -362,13 +362,14 @@ class Retrieval:
                  start_time_fs=None,
                  end_time_fs=None,
                  plot_update=True,
+                 plot_wl_um=(1.0, 2.0),
                  initial_guess_T_ps_AT=None,
                  initial_guess_wl_um_AW=None,
                  filter_um=None,
                  forbidden_um=None,
                  meas_spectrum_um=None,
+                 grad_ramp_for_meas_spectrum=False,
                  i_set_spectrum_to_meas=0,
-                 plot_wl_um=(1.0, 2.0),
                  debug_plotting=False):
 
         """
@@ -481,6 +482,17 @@ class Retrieval:
         self.delay_time = self.exp_T_fs[ind_start:ind_end]
         time_order = np.array([*zip(self.delay_time, np.arange(ind_start, ind_end))])
 
+        # only used if meas_spectrum_um is not None
+        if meas_spectrum_um is not None and grad_ramp_for_meas_spectrum:
+            h_meas_spectrum = np.linspace(.001, 1, 10)
+            h_meas_spectrum = np.repeat(h_meas_spectrum[:, np.newaxis], 5, 1).flatten()
+
+            self.maxiter = i_set_spectrum_to_meas + len(h_meas_spectrum)
+            print(f'maxiter has been adjusted to {self.maxiter}')
+
+        else:
+            h_meas_spectrum = np.ones(self.maxiter - i_set_spectrum_to_meas)
+
         # initialize the arrays to zeros
         self.setup_retrieval_arrays(self.delay_time)
 
@@ -572,7 +584,12 @@ class Retrieval:
                 self.EW_j[:] = self.fft()
 
                 if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
-                    self.amp[:] = meas_amp_interp[:]
+                    if i == i_set_spectrum_to_meas:
+                        starting_field = abs(self.EW_j)
+                        diff = meas_amp_interp - starting_field
+                        h = 0
+
+                    self.amp[:] = starting_field + diff * h_meas_spectrum[h]
                     self.phase[:] = np.arctan2(self.EW_j.imag, self.EW_j.real)
                     self.EW_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
@@ -616,6 +633,10 @@ class Retrieval:
 
                     plt.pause(.001)
 
+            if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
+                h += 1
+                # print(h)
+
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
             error = self.calculate_error(self.AT2D,
@@ -646,11 +667,16 @@ class Retrieval:
                 plt.pause(.001)
 
         if meas_spectrum_um is not None:
-            self.error = self.error[i_set_spectrum_to_meas:]
-            self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
-            self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
+            if not grad_ramp_for_meas_spectrum:
+                self.error = self.error[i_set_spectrum_to_meas:]
+                self.Output_Ej = self.Output_Ej[i_set_spectrum_to_meas:]
+                self.Output_EWj = self.Output_EWj[i_set_spectrum_to_meas:]
 
-        bestind = np.argmin(self.error)
+                bestind = np.argmin(self.error)
+            else:
+                bestind = -1
+        else:
+            bestind = np.argmin(self.error)
 
         self.AT_ret = np.fft.fftshift(self.Output_Ej[bestind])
         self.AW_ret = np.fft.fftshift(self.Output_EWj[bestind])
