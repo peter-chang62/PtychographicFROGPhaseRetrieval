@@ -17,6 +17,9 @@ def normalize(vec):
 
 
 # %%
+osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
+
+# %%
 center_wavelength_nm = 1560.
 maxiter = 25
 time_window_ps = 80
@@ -24,9 +27,6 @@ NPTS = 2 ** 15
 ret_grating = pr.Retrieval(maxiter=maxiter, time_window_ps=time_window_ps, NPTS=NPTS,
                            center_wavelength_nm=center_wavelength_nm)
 ret_grating.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
-
-# %%
-osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 
 # %%
 center_wavelength_nm = 1560.
@@ -58,7 +58,7 @@ ret_sanity.retrieve(corr_for_pm=True,
                     forbidden_um=None,
                     meas_spectrum_um=None,
                     grad_ramp_for_meas_spectrum=False,
-                    i_set_spectrum_to_meas=0,
+                    i_set_spectrum_to_meas=5,
                     debug_plotting=False
                     )
 
@@ -76,7 +76,8 @@ ret_grating.retrieve(corr_for_pm=True,
                      initial_guess_wl_um_AW=None,
                      filter_um=None,
                      forbidden_um=None,
-                     meas_spectrum_um=None,
+                     # meas_spectrum_um=None,
+                     meas_spectrum_um = [osa.x*1e-3, osa.y],
                      grad_ramp_for_meas_spectrum=False,
                      i_set_spectrum_to_meas=5,
                      debug_plotting=False
@@ -98,7 +99,7 @@ ret_hnlf.retrieve(corr_for_pm=True,
                   forbidden_um=None,
                   meas_spectrum_um=None,
                   grad_ramp_for_meas_spectrum=False,
-                  i_set_spectrum_to_meas=0,
+                  i_set_spectrum_to_meas=5,
                   debug_plotting=False
                   )
 
