@@ -626,7 +626,7 @@ class Retrieval:
                     axs_debug[4].set_title("E_j")
                     axs_debug[5].set_title("psi_j after amp replacement")
                     axs_debug[6].set_title("psiPrime_j")
-                    axs_debug[7].set_title("corr2")
+                    axs_debug[7].set_title("corr1")
                     axs_debug[8].set_title("corr2")
 
                     fig_debug.suptitle('{n}/{N}'.format(n=n, N=len(time_order)))

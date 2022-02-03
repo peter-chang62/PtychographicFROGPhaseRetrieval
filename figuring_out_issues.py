@@ -12,15 +12,16 @@ import clipboard_and_style_sheet
 import PhaseRetrieval as pr
 
 
-def correct_for_phase_matching(exp_wl_um, spctgm):
-    pulse_ref: fpn.Pulse
-
-    data_phasematching = np.genfromtxt("ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
-    wl, r = data_phasematching[:, 0], data_phasematching[:, 1]
-    r_gridded = spi.interp1d(wl, r)
-    ind = np.logical_and(exp_wl_um < min(wl), exp_wl_um > max(wl)).nonzero()[0]
-    r_ = r_gridded(exp_wl_um[ind])
-    spctgm[:, ind] /= r_
+# Henry's phase matching curve, otherwise just set corr_for_pm to True
+# def correct_for_phase_matching(exp_wl_um, spctgm):
+#     pulse_ref: fpn.Pulse
+#
+#     data_phasematching = np.genfromtxt("ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
+#     wl, r = data_phasematching[:, 0], data_phasematching[:, 1]
+#     r_gridded = spi.interp1d(wl, r)
+#     ind = np.logical_and(exp_wl_um < min(wl), exp_wl_um > max(wl)).nonzero()[0]
+#     r_ = r_gridded(exp_wl_um[ind])
+#     spctgm[:, ind] /= r_
 
 
 def normalize(vec):
@@ -28,10 +29,13 @@ def normalize(vec):
 
 
 # %%
-center_wavelength_nm = 1563.
+center_wavelength_nm = 1560.
+maxiter = 25
+time_window_ps = 80
+NPTS = 2 ** 15
 
 # %%
-ret = pr.Retrieval(maxiter=25, time_window_ps=80, NPTS=2 ** 15, center_wavelength_nm=center_wavelength_nm)
+ret = pr.Retrieval(maxiter=maxiter, time_window_ps=time_window_ps, NPTS=NPTS, center_wavelength_nm=center_wavelength_nm)
 # ret.load_data("TestData/sanity_check_data.txt")
 # ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # ret.load_data("Data/01-18-2022/spectrogram_grating_pair_output.txt")
@@ -50,7 +54,7 @@ ret.retrieve(corr_for_pm=True,
              initial_guess_wl_um_AW=None,
              filter_um=None,
              forbidden_um=None,
-             meas_spectrum_um=[osa.x * 1e-3, osa.y],
+             meas_spectrum_um=None,
              grad_ramp_for_meas_spectrum=False,
              i_set_spectrum_to_meas=5,
              debug_plotting=False
