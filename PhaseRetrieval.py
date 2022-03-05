@@ -51,11 +51,11 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_
     axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_ref[:, indwl].T, cmap='jet')
     axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_calc[:, indwl].T, cmap='jet')
     axs[0].set_xlabel("T (ps)")
-    axs[1].set_xlabel("$\mathrm{\mu m}$")
+    axs[1].set_xlabel("$\\mathrm{\\mu m}$")
     axs[2].set_xlabel("T (fs)")
-    axs[2].set_ylabel("wavelength ($\mathrm{\mu m}$)")
+    axs[2].set_ylabel("wavelength ($\\mathrm{\\mu m}$)")
     axs[3].set_xlabel("T (fs)")
-    axs[3].set_ylabel("wavelength ($\mathrm{\mu m}$)")
+    axs[3].set_ylabel("wavelength ($\\mathrm{\\mu m}$)")
     axs[2].set_title("Experiment")
     axs[3].set_title("Retrieved")
     fig.suptitle("Error: " + '%.3f' % error)
@@ -371,7 +371,6 @@ class Retrieval:
                  grad_ramp_for_meas_spectrum=False,
                  i_set_spectrum_to_meas=0,
                  debug_plotting=False):
-
         """
         :param corr_for_pm:
         :param start_time_fs:

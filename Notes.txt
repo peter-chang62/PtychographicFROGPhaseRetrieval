@@ -8,3 +8,12 @@ Differences between Henry's code and yours:
 
 Other than that there are no major differences. Looking at Nazanin's paper, there are two notable things: the reconstruction error looks much smaller (the reconstructed FROG looks very close to the experimental one). She also does not appear to get any significant amount of light in the spectrogram that is around 500 nm, so I don't think that is a problem in yours. 
 
+___________________________________________________________________
+
+01/31/2022
+
+I noticed today that adding doing a 'slow ramp' that gradually constrains the retrieval to the measured power spectrum doesn't fix the lack of convergence. 
+
+I also tried a ramp that that waits a few iterations each time after applying a gradual change. 
+
+The retrieval error just climbs with the ramp up to the same error I recall seeing when I constrained the spectrum to the measured one immediately. 
