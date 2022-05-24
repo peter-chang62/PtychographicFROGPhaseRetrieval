@@ -46,7 +46,7 @@ def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_
     AW = fft(AT)
     axs[1].plot(pulse_ref.wl_um[indwl], normalize(abs(AW[indwl]) ** 2))
     ax = axs[1].twinx()
-    phase = np.unwrap(np.arctan2(AW[indwl].imag, AW[indwl].real))
+    phase = np.unwrap(np.arctan2(AW[indwl].imag, AW[indwl].real)) * 180 / np.pi  # convert to deg.
     ax.plot(pulse_ref.wl_um[indwl], phase, 'C1')
     axs[2].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_ref[:, indwl].T, cmap='jet')
     axs[3].pcolormesh(dT_fs_vec, pulse_ref.wl_um[indwl], spctgm_calc[:, indwl].T, cmap='jet')
@@ -372,16 +372,16 @@ class Retrieval:
                  i_set_spectrum_to_meas=0,
                  debug_plotting=False):
         """
-        :param corr_for_pm:
+        :param corr_for_pm: should be True
         :param start_time_fs:
         :param end_time_fs:
         :param plot_update:
         :param initial_guess_T_ps_AT:
         :param initial_guess_wl_um_AW:
-        :param filter_um:
+        :param filter_um: filter the experimental spectrogram (only uses a subset of the spectrogram)
 
-        :param forbidden_um: brick wall filter after each iteration, I'll leave it here since I already wrote it but
-        generally it's not a good idea, unless you implement some sort of window to avoid edges from developing
+        :param forbidden_um: tukey filter that filters the retrieved spectrum after each iteration, it uses a tukey
+         filter with alpha=.25 (default is 0.5)
 
         :param meas_spectrum_um:
         :param i_set_spectrum_to_meas:
