@@ -458,16 +458,18 @@ class Retrieval:
 
             window_forbidden = np.fft.fftshift(window_forbidden)
 
-        """fftshift everything before fft's are calculated 
+        # ______________________________________________________________________________________________________________
+        # fftshift everything before fft's are calculated
         
-        The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts 
-        everything that follows 
+        # The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts
+        # everything that follows
         
-        The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation 
-        also needs to be fftshifted 
+        # The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation
+        # also needs to be fftshifted
         
-        Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be 
-        fftshifted """
+        # Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be
+        # fftshifted
+        # ______________________________________________________________________________________________________________
 
         AT0_fftshift = np.fft.ifftshift(self.pulse.AT)
         interp_data_fftshift = np.fft.ifftshift(self._interp_data, axes=1)
