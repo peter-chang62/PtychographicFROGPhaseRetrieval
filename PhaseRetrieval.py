@@ -24,13 +24,20 @@ def normalize(vec):
 
 def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=(1, 2)):
     """
-    :param AT:
-    :param dT_fs_vec:
-    :param pulse_ref:
-    :param spctgm_ref:
-    :param filter_um:
-    :param plot_um:
-    :return:
+    1. calculates the spectrogram corresponding to AT using: AT, dT_fs_vec, and pulse_ref
+    2. calculates the error with respect to the reference spectrogram: spctgm_ref, using either
+    the entire bandwidth, or a filtered portion via filter_um.
+    *Note that spctgm_ref* must match the time and frequency axis of AT
+
+    The results are then plotted
+
+    :param AT: 1D array
+    :param dT_fs_vec: 1D array
+    :param pulse_ref: PyNLO pulse instance
+    :param spctgm_ref: 2D array
+    :param filter_um: default None, otherwise is a list
+    :param plot_um: wavelength axis limits for the plotting
+    :return: calculated spectrogram, the figure and the axes of the plot
     """
 
     pulse_ref: fpn.Pulse
@@ -695,6 +702,11 @@ class Retrieval:
                 self.fft_input[:] = self.psi_j[:]
                 self.phi_j[:] = self.fft()
 
+                # ind_filter_fftshift can be used to utilize only a portion of the experimental spectrogram
+                # for phase retrieval (spectrally incomplete spectrogram)
+                # otherwise, it defaults to utilize the entire bandwidth
+                # you might feel the need to use a threshold, e.g. (self.amp > threshold).nonzero()[0]
+                # but this should be taken care of already when you call the denoise function
                 self.amp[:] = 0
                 self.amp[ind_filter_fftshift] = np.sqrt(interp_data_fftshift[int(j), ind_filter_fftshift])
                 ind_nonzero = (self.amp > 0).nonzero()[0]
