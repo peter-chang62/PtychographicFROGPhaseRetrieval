@@ -23,6 +23,16 @@ def normalize(vec):
 
 
 def plot_ret_results(AT, dT_fs_vec, pulse_ref, spctgm_ref, filter_um=None, plot_um=(1, 2)):
+    """
+    :param AT:
+    :param dT_fs_vec:
+    :param pulse_ref:
+    :param spctgm_ref:
+    :param filter_um:
+    :param plot_um:
+    :return:
+    """
+
     pulse_ref: fpn.Pulse
 
     if filter_um is not None:
@@ -130,11 +140,30 @@ def interpolate_spctgm_to_grid(F_mks_input, F_mks_output, T_fs_input, T_fs_outpu
     return gridded(F_mks_output, T_fs_output)
 
 
+# I've verified that the math here is the same as Sidorenko's matlab code,
+# and that their matlab code matches what is stated in their paper
 def denoise(x, gamma):
+    """
+    :param x: 1D array
+    :param gamma: threshold (float)
+    :return: 0 if abs(x) < gamma, otherwise returns x - gamma * sign(x)
+    """
     return np.where(abs(x) < gamma, 0.0, np.sign(x) * (abs(x) - gamma))
 
 
+# brick wall band pass filter convenience function
 def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
+    """
+    :param AW: array with frequency on first (0th) axis
+    :param ll_um: shorter wavelength limit (float)
+    :param ul_um: longer wavelength limit (float)
+    :param pulse_ref: reference pulse (used for wavelength axis)
+    :param fftshift: is the AW array fftshifted? (bool)
+    :return: None
+
+    applies a brick wall band pass filter to AW based on ll_um, and ul_um, and pulse_ref
+    which is used to get a frequency axis
+    """
     pusle_ref: fpn.Pulse
 
     if fftshift:
@@ -150,35 +179,66 @@ def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
 
 
 class Retrieval:
+    """
+    This is the main pulse retrieval class. The reason it is so long is because the fft's are done using
+    pyfftw, which requires some bookkeeping
+    """
+
     def __init__(self, maxiter=100, time_window_ps=10., NPTS=2 ** 12, center_wavelength_nm=1560.):
+        """
+        :param maxiter: maximum number of iterations for phase retrieval
+        :param time_window_ps: time window to use for the pulse field
+        :param NPTS: number of points in the pulse field array,
+            together with time_window_ps, this sets the frequency axis
+        :param center_wavelength_nm: center wavelength, you should give a number such that the initial guess
+            at least has power where they should be non-zero power spectral density, from there if you're off
+            the retrieved pulse field in the frequency domain will not be centered in the array
+        """
+
+        # internal variables to be used later
         self._exp_T_fs = None
         self._exp_wl_nm = None
         self._data = None
         self._interp_data = None
         self.maxiter = maxiter
 
+        # used to track if the user has divided out the phase-matching curve yet
         self.corrected_for_phase_matching = False
 
+        # pulse instance taken from PyNLO used to set the initial guess for phase-retrieval
         self.pulse = fpn.Pulse(T0_ps=0.02,
                                center_wavelength_nm=center_wavelength_nm,
                                time_window_ps=time_window_ps,
                                NPTS=NPTS)
 
+        # random number generator
         self._rng = np.random.default_rng()
 
+        # soft threshold used for de-noising
         self.gamma = 1e-3  # does not appear to sensitive whether it's 1e-3 or down to 1e-6
 
     def shift1D(self, AT_to_shift, AW, AW_to_shift, dT_fs, V_THz):
-        pulse_ref: fpn.Pulse
-
+        """
+        :param AT_to_shift:
+        :param AW:
+        :param AW_to_shift:
+        :param dT_fs:
+        :param V_THz:
+        :return:
+        """
         AW_to_shift[:] = AW[:] * np.exp(1j * V_THz[:] * dT_fs * 1e-3)
 
         self.fft_output[:] = AW_to_shift[:]
         AT_to_shift[:] = self.ifft()
 
     def shift2D(self, AW2D_to_shift, phase2D, dT_fs_vec, V_THz):
-        pulse_ref: fpn.Pulse
-
+        """
+        :param AW2D_to_shift:
+        :param phase2D:
+        :param dT_fs_vec:
+        :param V_THz:
+        :return:
+        """
         phase2D[:] = V_THz[:]
         phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
         phase2D[:] = np.exp(phase2D[:])
@@ -190,6 +250,17 @@ class Retrieval:
 
     def calculate_spctgm(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                          spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz):
+        """
+        :param AT2D:
+        :param AT2D_to_shift:
+        :param AW2D_to_shift:
+        :param spctgm_to_calc_Tdomain:
+        :param spctgm_to_calc_Wdomain:
+        :param phase2D:
+        :param dT_fs_vec:
+        :param V_THz:
+        :return:
+        """
         self.shift2D(AW2D_to_shift, phase2D, dT_fs_vec, V_THz)
 
         spctgm_to_calc_Tdomain[:] = AT2D[:] * AT2D_to_shift[:]
@@ -202,6 +273,19 @@ class Retrieval:
     def calculate_error(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                         spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz, spctgm_ref,
                         ind_filter):
+        """
+        :param AT2D:
+        :param AT2D_to_shift:
+        :param AW2D_to_shift:
+        :param spctgm_to_calc_Tdomain:
+        :param spctgm_to_calc_Wdomain:
+        :param phase2D:
+        :param dT_fs_vec:
+        :param V_THz:
+        :param spctgm_ref:
+        :param ind_filter:
+        :return:
+        """
 
         self.calculate_spctgm(AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                               spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz)
@@ -217,8 +301,9 @@ class Retrieval:
         :return: 1D complex arrray, AT scaled to the correct power for the reference spectrogram
         """
 
+        # we'll compare integrated power at the center of the spectrogram,
+        # which corresponds to a time delay of 0 (so AT(t) * AT(t - 0) = AT^2)
         AW2 = np.zeros(AT.shape, AT.dtype)
-
         self.fft_input[:] = AT[:] ** 2
         AW2[:] = self.fft()
 
@@ -229,6 +314,12 @@ class Retrieval:
         return AT * scale_power
 
     def load_data(self, path_to_data):
+        """
+        loads the data file and sets relevant parameters
+
+        :param path_to_data: path to data file (string)
+        """
+
         data = np.genfromtxt(path_to_data)
         self._exp_T_fs = data[:, 0][1:]
         self._exp_wl_nm = data[0][1:]
@@ -238,7 +329,6 @@ class Retrieval:
         integral = simps(self._data, axis=1)
         ind_max = np.argmax(integral)
         ind_center = np.argmin(self.exp_T_fs ** 2)
-        # ind_center = len(self.exp_T_fs) // 2
         if ind_max < ind_center:
             diff = ind_center - ind_max
             self._data = self._data[:-diff]
@@ -257,6 +347,11 @@ class Retrieval:
         self._interp_data = None
 
     def setup_retrieval_arrays(self, delay_time):
+        """
+        initialize all arrays needed for pyfftw
+
+        :param delay_time: 1D array (its length is used to set the size of relevant arrays)
+        """
 
         # 1D arrays
         self.E_j = np.zeros(self.pulse.AT.shape, dtype=self.pulse.AT.dtype)
@@ -306,6 +401,8 @@ class Retrieval:
                                  flags=["FFTW_MEASURE"])
 
     def interpolate_data_to_sim_grid(self):
+        """
+        """
         self._interp_data = interpolate_spctgm_to_grid(F_mks_input=self.exp_F_mks,
                                                        F_mks_output=self.pulse.F_mks * 2,
                                                        T_fs_input=self.exp_T_fs,
@@ -361,49 +458,67 @@ class Retrieval:
     def retrieve(self, corr_for_pm=True,
                  start_time_fs=None,
                  end_time_fs=None,
+                 filter_um=None,
                  plot_update=True,
                  plot_wl_um=(1.0, 2.0),
                  initial_guess_T_ps_AT=None,
                  initial_guess_wl_um_AW=None,
-                 filter_um=None,
                  forbidden_um=None,
                  meas_spectrum_um=None,
                  grad_ramp_for_meas_spectrum=False,
                  i_set_spectrum_to_meas=0,
                  debug_plotting=False):
+
         """
-        :param corr_for_pm: should be True
-        :param start_time_fs:
-        :param end_time_fs:
-        :param plot_update:
-        :param initial_guess_T_ps_AT:
-        :param initial_guess_wl_um_AW:
-        :param filter_um: filter the experimental spectrogram (only uses a subset of the spectrogram)
-
-        :param forbidden_um: tukey filter that filters the retrieved spectrum after each iteration, it uses a tukey
-         filter with alpha=.25 (default is 0.5)
-
-        :param meas_spectrum_um:
-        :param i_set_spectrum_to_meas:
-        :param plot_wl_um:
-        :param debug_plotting:
-        :return:
+        :param corr_for_pm: divide out phase matching curve before starting? (bool)
+                this assumes a number of default values (phase-matching angle, BBO thickness, and aoi), so
+                if you divided out your own phase-matching curve, set this to False
+        :param start_time_fs: start time of spectrogram to use for retrieval
+        :param end_time_fs: end time of spectrogram to use for retrieval
+        :param filter_um: wavelength limits of spectrogram to use (list)
+        :param plot_update: plot the retrieval results after each iteration? (bool)
+        :param plot_wl_um: if plot_update is True, these are the wavelength limits to use for plotting (list)
+        :param initial_guess_T_ps_AT: initial pulse-field in the time domain
+        :param initial_guess_wl_um_AW: initial pulse-field in the frequency domain
+                (only provide either time or frequency)
+        :param forbidden_um: band-pass filter (list): filter the pulse-field after each iteration with a tukey window
+        :param meas_spectrum_um: experimental power spectrum passed as (wl_um, spectrum)
+                if provided, the power spectrum will be constrained in the retrieval. The default is None
+                which does not constrain the power spectrum
+        :param grad_ramp_for_meas_spectrum: if True, the power spectrum will be constrained, but will be gradually
+                ramped from the current retrieval spectrum to the experimental ones over 10 iterations. The goal
+                was to let the retrieved phase sort of "catch up" with the constraint, but doesn't actually seem
+                to help ...
+        :param i_set_spectrum_to_meas: how many iterations to run before starting to constrain the power spectrum
+                (that is the user decides to constrain the power spectrum)
+        :param debug_plotting: In addition to plot_update, debug_plotting will plot all the relevant arrays
+                used during retrieval, to give the user an idea if his frequency and time bandwidth are sufficient
+                to prevent aliasing during iterations
         """
 
+        # _____________________ correct for phase matching _____________________________________________________________
         if corr_for_pm:
             # make sure to correct for phase matching
             if not self.corrected_for_phase_matching:
                 self.correct_for_phase_match()
 
+        # _____________________ calculate interpolated spectrogram _____________________________________________________
         # make sure to have interpolated the data to the simulation grid
         if self._interp_data is None:
             self.interpolate_data_to_sim_grid()
 
+        # ___________________ set the start and end time of the spectrogram to be used for retrieval ___________________
+        # start_time_fs and end_time_fs will either be a subset of the experimental time axis,
+        # or its full extent. If start_time_fs or end_time_fs exceeds the experimental axis, the
+        # experimental axis limits will be used instead
         if start_time_fs is None:
             start_time_fs = 0.0
         if end_time_fs is None:
             end_time_fs = self.exp_T_fs[-1]
 
+        # _________________ setting the initial guess for the pulse field ______________________________________________
+        # if we are constraining the power spectrum, set the initial guess to the transform limited field
+        # calculated from the experimental power spectrum
         if meas_spectrum_um is not None:
             wl_um, spectrum = meas_spectrum_um
             aw = np.sqrt(abs(spectrum))
@@ -411,42 +526,43 @@ class Retrieval:
             self.pulse.set_AT(ifft(self.pulse.AW))  # pynlo has ifft <-> fft defined in reverse
 
         else:
-
+            # if no initial guess is provided for the pulse-field, default to setting the time domain to
+            # the autocorrelation calculated from the interpolated spectrogram
             if (initial_guess_T_ps_AT is None) and (initial_guess_wl_um_AW is None):
                 # default to autocorrelation
                 initial_guess_T_ps_AT = np.sum(self._interp_data, axis=1)
-
-                # interestingly enough, symmetrizing doesn't help
-                # initial_guess_T_fs_AT[:] = (initial_guess_T_fs_AT[:] + initial_guess_T_fs_AT[::-1]) / 2
-
                 initial_guess_T_ps_AT -= min(initial_guess_T_ps_AT)
-
                 self.pulse.set_AT_experiment(self.exp_T_fs * 1e-3, initial_guess_T_ps_AT)
 
+            # only one of time domain or frequency domain initial guesses can be provided
             elif (initial_guess_T_ps_AT is not None) and (initial_guess_wl_um_AW is not None):
-                raise RuntimeError("only one of initial_guess_T_fs_AT or initial_guess_wl_um_AW can be defined")
+                raise AssertionError("only one of initial_guess_T_fs_AT or initial_guess_wl_um_AW can be defined")
 
+            # time domain initial-guess
             elif initial_guess_T_ps_AT is not None:
                 # initial guess generally can be complex
                 T_ps, field = initial_guess_T_ps_AT
                 self.pulse.set_AT_experiment(T_ps, field)
 
+            # otherwise frequency domain initial-guess
             else:
                 wl_um, field = initial_guess_wl_um_AW
                 self.pulse.set_AW_experiment(wl_um, field)
                 self.pulse.set_AT(ifft(self.pulse.AW))
 
-        # for incomplete spectrograms, the user can set a range of wavelengths to be used for phase retrieval. It's
-        # important to note that the indexing will be done for fftshifted arrays
+        # _____________________________ set the frequency range to be used for phases retrieval ________________________
+        # the user can set a range of wavelengths to be used for phase retrieval. This is useful if phase-matching
+        # bandwidth was an issue. It's important to note that the indexing will be done for fftshifted arrays
         wl_um_fftshift = np.fft.ifftshift(self.pulse.wl_um)
         if filter_um is not None:
             ll_um, ul_um = filter_um
             ind_filter_fftshift = np.logical_and(wl_um_fftshift > ll_um, wl_um_fftshift < ul_um).nonzero()[0]
 
         else:
-            # in this case array[ind_filter_fftshift] = array[:]
-            ind_filter_fftshift = np.arange(len(wl_um_fftshift))
+            ind_filter_fftshift = np.arange(len(wl_um_fftshift))  # in this case array[ind_filter_fftshift] = array[:]
 
+        # _______________________ the user can decide to filter the retrieved spectrum after each iteration ____________
+        # again, it is important to note that the indexing will be done for fftshifted arrays
         if forbidden_um is not None:
             ll_um, ul_um = forbidden_um
             wl_um = self.pulse.wl_um
@@ -459,31 +575,34 @@ class Retrieval:
             window_forbidden = np.fft.fftshift(window_forbidden)
 
         # ______________________________________________________________________________________________________________
-        # fftshift everything before fft's are calculated
-        
-        # The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this fftshifts
-        # everything that follows
-        
-        # The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error calculation
-        # also needs to be fftshifted
-        
-        # Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also needs to be
-        # fftshifted
+        # fftshift everything before fft's are calculated:
+        #
+        #   1. The initial guess is pulse.AT, everything is calculated off the initial guess so fftshifting this
+        #   fftshifts everything that follows
+        #
+        #   2. The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error
+        #   calculation also needs to be fftshifted
+        #
+        #   3. The calculated spectrogram will be fftshifted, so the reference spectrogram used in the error
+        #   calculation also needs to be fftshifted
+        #
+        #   4. Since the fields are fftshifted, the frequency axis used to calculate time shifted fields also
+        #   needs to be fftshifted
         # ______________________________________________________________________________________________________________
 
+        # used for initial guess and subsequent error calculations
         AT0_fftshift = np.fft.ifftshift(self.pulse.AT)
         interp_data_fftshift = np.fft.ifftshift(self._interp_data, axes=1)
         V_THz_fftshift = np.fft.ifftshift(self.pulse.V_THz)
 
-        # delay times to iterate over for the phase retrieval. We set this to the experimentally measured delayed
-        # times. The user has the option to narrow the time window to a subset of what was measured
-        # experimentally
+        # spectrogram delay times to iterate over
         ind_start = np.argmin((self.exp_T_fs - start_time_fs) ** 2)
         ind_end = np.argmin((self.exp_T_fs - end_time_fs) ** 2)
         self.delay_time = self.exp_T_fs[ind_start:ind_end]
         time_order = np.array([*zip(self.delay_time, np.arange(ind_start, ind_end))])
 
-        # only used if meas_spectrum_um is not None
+        # h_meas_spectrum is either a gradual ramp, or an array of ones, depending
+        # on the gradual_ramp flag
         if meas_spectrum_um is not None and grad_ramp_for_meas_spectrum:
             h_meas_spectrum = np.linspace(.001, 1, 10)
             h_meas_spectrum = np.repeat(h_meas_spectrum[:, np.newaxis], 5, 1).flatten()
@@ -510,14 +629,13 @@ class Retrieval:
         self.AW2D_to_shift[:] = self.EW_j[:]
 
         if meas_spectrum_um is not None:
-            # already fftshifted
+            # interpolated experimental power spectrum, already fftshifted
             meas_amp_interp = abs(self.EW_j)
 
         if plot_update:
             fig, (ax1, ax2) = plt.subplots(1, 2)
             ax3 = ax2.twinx()
             ind_wl = np.logical_and(self.pulse.wl_um >= plot_wl_um[0], self.pulse.wl_um <= plot_wl_um[-1]).nonzero()[0]
-            # ind_wl = (self.pulse.wl_um > 0).nonzero()
 
         error = self.calculate_error(self.AT2D,
                                      self.AT2D_to_shift,
@@ -539,7 +657,6 @@ class Retrieval:
         for i in range(self.maxiter):
             self._rng.shuffle(time_order, axis=0)
             alpha = self._rng.uniform(low=0.1, high=0.5)
-            # alpha = abs(0.2 + self._rng.normal(0, 1) / 20)
 
             for n, (dt, j) in enumerate(time_order):
                 self.shift1D(self.Eshift_j, self.EW_j, self.EWshift_j, dt, V_THz_fftshift)
@@ -555,7 +672,6 @@ class Retrieval:
                 self.phase[:] = np.arctan2(self.phi_j.imag, self.phi_j.real)
                 # only replace known parts of the spectrum
                 self.phi_j[ind_nonzero] = self.amp[ind_nonzero] * np.exp(1j * self.phase[ind_nonzero])
-                # self.phi_j[:] = self.amp[:] * np.exp(1j * self.phase[:])
 
                 # denoise
                 self.phi_j[:] = denoise(self.phi_j.real, self.gamma) + 1j * denoise(self.phi_j.imag, self.gamma)
@@ -597,7 +713,7 @@ class Retrieval:
                     self.fft_output[:] = self.EW_j[:]
                     self.E_j[:] = self.ifft()
 
-                # do not apply filter if power spectrum is known
+                # do not apply filter if power spectrum is known (so elif)
                 elif forbidden_um is not None:
                     # power is not allowed at these wavelengths (filter them out!)
                     self.EW_j *= window_forbidden
@@ -636,7 +752,6 @@ class Retrieval:
 
             if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
                 h += 1
-                # print(h)
 
             self.AT2D[:] = self.E_j[:]
             self.AW2D_to_shift[:] = self.EW_j[:]
