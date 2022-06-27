@@ -556,6 +556,14 @@ class Retrieval:
         # _________________ setting the initial guess for the pulse field ______________________________________________
         # if we are constraining the power spectrum, set the initial guess to the transform limited field
         # calculated from the experimental power spectrum
+        # otherwise default to using the autocorrelation to set the pulse's field in the time domain
+        # or use an initial time domain or frequency domain guess for the pulse field if either was provided.
+        # *Note that the center wavelength set in __init__ will be used to determine the initial guess in the
+        # frequency domain if one is giving the initial guess in the time domain*
+        # changing the pulse's center_wavelength before calling retrieve should have the same effect as
+        # setting center_wavelength in __init__
+        # ______________________________________________________________________________________________________________
+
         if meas_spectrum_um is not None:
             wl_um, spectrum = meas_spectrum_um
             aw = np.sqrt(abs(spectrum))
