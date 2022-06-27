@@ -161,15 +161,15 @@ def denoise(x, gamma):
 # brick wall band pass filter convenience function
 def apply_filter(AW, ll_um, ul_um, pulse_ref, fftshift=False):
     """
+    applies a brick wall band pass filter to AW based on ll_um, and ul_um, and pulse_ref
+    which is used to get a frequency axis
+
     :param AW: array with frequency on first (0th) axis
     :param ll_um: shorter wavelength limit (float)
     :param ul_um: longer wavelength limit (float)
     :param pulse_ref: reference pulse (used for wavelength axis)
     :param fftshift: is the AW array fftshifted? (bool)
     :return: None
-
-    applies a brick wall band pass filter to AW based on ll_um, and ul_um, and pulse_ref
-    which is used to get a frequency axis
     """
     pusle_ref: fpn.Pulse
 
