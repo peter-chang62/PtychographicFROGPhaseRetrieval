@@ -217,14 +217,24 @@ class Retrieval:
         # soft threshold used for de-noising
         self.gamma = 1e-3  # does not appear to sensitive whether it's 1e-3 or down to 1e-6
 
+    # __________________________________________________________________________________________________________________
+    # In self.shift1D, self.shift2D, self.calculate_spctgm, and self.calculate_error, all the input arrays are assumed
+    # to be fftshifted! This is all taken care of in self.retrieve
+    #
+    # If you wish to do something similar to the above functions, I would suggest you use the ones defined
+    # in the outer scope. Everything is there except shift1D
+    # __________________________________________________________________________________________________________________
+
     def shift1D(self, AT_to_shift, AW, AW_to_shift, dT_fs, V_THz):
         """
-        :param AT_to_shift:
-        :param AW:
-        :param AW_to_shift:
-        :param dT_fs:
-        :param V_THz:
-        :return:
+        1. AW_to_shift is multiplied by a linear phase calculated from V_THz and dT_fs
+        2. AW_to_shift is then input to self.ifft() such that AT_to_shift() becomes the time shifted field
+
+        :param AT_to_shift: 1D array
+        :param AW: 1D array
+        :param AW_to_shift: 1D array
+        :param dT_fs: float
+        :param V_THz: 1D array
         """
         AW_to_shift[:] = AW[:] * np.exp(1j * V_THz[:] * dT_fs * 1e-3)
 
@@ -233,11 +243,16 @@ class Retrieval:
 
     def shift2D(self, AW2D_to_shift, phase2D, dT_fs_vec, V_THz):
         """
-        :param AW2D_to_shift:
-        :param phase2D:
-        :param dT_fs_vec:
-        :param V_THz:
-        :return:
+        1. AW2D_to_shift is multiplied by a 2D array of linear phases calculated from V_THz and dT_fs_vec.
+        The 2D array of linear phases is used to populate the phase2D array, so phase2D can be an array of anything
+        so long as it matches the data type
+        2. AW2D_to_shift is then input to self.ifft2() such that self.AT2D_to_shift becomes a 2D array of
+        time shifted fields
+
+        :param AW2D_to_shift: 2D array
+        :param phase2D: 2D array
+        :param dT_fs_vec: 1D array
+        :param V_THz: 1D array
         """
         phase2D[:] = V_THz[:]
         phase2D[:] *= 1j * dT_fs_vec[:, np.newaxis] * 1e-3
@@ -251,15 +266,22 @@ class Retrieval:
     def calculate_spctgm(self, AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
                          spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz):
         """
-        :param AT2D:
-        :param AT2D_to_shift:
-        :param AW2D_to_shift:
-        :param spctgm_to_calc_Tdomain:
-        :param spctgm_to_calc_Wdomain:
-        :param phase2D:
-        :param dT_fs_vec:
-        :param V_THz:
-        :return:
+        1. AW2D_to_shift and AT2D_to_shift, phase2D, dT_fs_vec and V_THz are used to calculate the time shifted
+        fields via self.shift2D
+        2. AT2D_to_shift is multiplied with AT2D to get the complex spectrogram in the time domain
+        3. the spectrogram in the time domain is then input to self.fft2() to calculate the complex
+        frequency domain spectrogram
+        4. the spectrogram in the frequency domain is then multiplied by its conjugate
+        to get the modulus squared
+
+        :param AT2D: 2D array
+        :param AT2D_to_shift: 2D array
+        :param AW2D_to_shift: 2D array
+        :param spctgm_to_calc_Tdomain: 2D array
+        :param spctgm_to_calc_Wdomain: 2D array
+        :param phase2D: 2D array
+        :param dT_fs_vec: 1D array
+        :param V_THz: 1D array
         """
         self.shift2D(AW2D_to_shift, phase2D, dT_fs_vec, V_THz)
 
@@ -274,16 +296,23 @@ class Retrieval:
                         spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, V_THz, spctgm_ref,
                         ind_filter):
         """
-        :param AT2D:
-        :param AT2D_to_shift:
-        :param AW2D_to_shift:
-        :param spctgm_to_calc_Tdomain:
-        :param spctgm_to_calc_Wdomain:
-        :param phase2D:
-        :param dT_fs_vec:
-        :param V_THz:
-        :param spctgm_ref:
-        :param ind_filter:
+        1. Calculates the spectrogram using AT2D, AT2D_to_shift, AW2D_to_shift, spctgm_to_calc_Tdomain,
+        spctgm_to_calc_Wdomain, phase2D, dT_fs_vec, and V_THz using self.calculate_spctgm
+        2. This is then used together with spctgm_ref to calculate sqrt(delta^2 / ref_spctgm^2)
+
+        The user can specify the indices to use for calculating the error (for example, if you
+        were to spectrally filter) Remember the input arrays are fftshifted when passing indices!
+
+        :param AT2D: 2D array
+        :param AT2D_to_shift: 2D array
+        :param AW2D_to_shift: 2D array
+        :param spctgm_to_calc_Tdomain: 2D array
+        :param spctgm_to_calc_Wdomain: 2D array
+        :param phase2D: 2D array
+        :param dT_fs_vec: 1D array
+        :param V_THz: 1D array
+        :param spctgm_ref: 2D array
+        :param ind_filter: 1D array
         :return:
         """
 
@@ -482,6 +511,7 @@ class Retrieval:
         :param initial_guess_wl_um_AW: initial pulse-field in the frequency domain
                 (only provide either time or frequency)
         :param forbidden_um: band-pass filter (list): filter the pulse-field after each iteration with a tukey window
+                *This is implemented only if the measured spectrum is not provided, otherwise it is ignored!*
         :param meas_spectrum_um: experimental power spectrum passed as (wl_um, spectrum)
                 if provided, the power spectrum will be constrained in the retrieval. The default is None
                 which does not constrain the power spectrum
@@ -701,8 +731,10 @@ class Retrieval:
                 self.EW_j[:] = self.fft()
 
                 if (meas_spectrum_um is not None) and i >= i_set_spectrum_to_meas:
+                    # start constraining the spectrum
                     if i == i_set_spectrum_to_meas:
                         starting_field = abs(self.EW_j)
+                        # difference b/w experimental spectrum and spectrum at iteration i_set_spectrum_to_meas
                         diff = meas_amp_interp - starting_field
                         h = 0
 
