@@ -20,19 +20,19 @@ def normalize(vec):
     return vec / np.max(abs(vec))
 
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 center_wavelength_nm = 1560.
-maxiter = 25
-time_window_ps = 100
-NPTS = 2 ** 16
+maxiter = 100
+time_window_ps = 20
+NPTS = 2 ** 13
 ret_grating = pr.Retrieval(maxiter=maxiter, time_window_ps=time_window_ps, NPTS=NPTS,
                            center_wavelength_nm=center_wavelength_nm)
 ret_grating.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 center_wavelength_nm = 1560.
 maxiter = 25
 time_window_ps = 10
@@ -41,7 +41,7 @@ ret_hnlf = pr.Retrieval(maxiter=maxiter, time_window_ps=time_window_ps, NPTS=NPT
                         center_wavelength_nm=center_wavelength_nm)
 ret_hnlf.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 center_wavelength_nm = 1560.
 maxiter = 25
 time_window_ps = 10
@@ -50,16 +50,18 @@ ret_sanity = pr.Retrieval(maxiter=maxiter, time_window_ps=time_window_ps, NPTS=N
                           center_wavelength_nm=center_wavelength_nm)
 ret_sanity.load_data("TestData/sanity_check_data.txt")
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 ret_sanity.retrieve(corr_for_pm=True,
-                    start_time_fs=None,
-                    end_time_fs=None,
+                    start_time_fs=-100,
+                    end_time_fs=100,
                     plot_update=True,
                     plot_wl_um=[1, 2],
                     initial_guess_T_ps_AT=None,
                     initial_guess_wl_um_AW=None,
-                    filter_um=None,
-                    forbidden_um=None,
+                    # filter_um=None,
+                    filter_um=[1, 2],
+                    # forbidden_um=None,
+                    forbidden_um=[1, 2],
                     meas_spectrum_um=None,
                     grad_ramp_for_meas_spectrum=False,
                     i_set_spectrum_to_meas=5,
@@ -67,21 +69,22 @@ ret_sanity.retrieve(corr_for_pm=True,
                     )
 
 spctgm, fig, axs = pr.plot_ret_results(ret_sanity.AT_ret, ret_sanity.exp_T_fs, ret_sanity.pulse,
-                                       ret_sanity.interp_data, plot_um=[1.54, 1.58])
+                                       ret_sanity.interp_data, plot_um=[1., 2])
 fig.suptitle("sanity output")
 
-# %%
+# %% ___________________________________________________________________________________________________________________
+ret_grating.maxiter = 50
 ret_grating.retrieve(corr_for_pm=True,
                      start_time_fs=0,
                      end_time_fs=250,
                      plot_update=True,
-                     plot_wl_um=[1.54, 1.58],
+                     plot_wl_um=[1, 2],
                      initial_guess_T_ps_AT=None,
                      initial_guess_wl_um_AW=None,
-                     filter_um=None,
-                     # filter_um=[1.5, 1.6],
+                     # filter_um=None,
+                     filter_um=[1.52, 1.62],
                      # forbidden_um=None,
-                     forbidden_um=[1.53, 1.59],
+                     forbidden_um=[1.52, 1.62],
                      meas_spectrum_um=None,
                      # meas_spectrum_um=[osa.x * 1e-3, osa.y],
                      grad_ramp_for_meas_spectrum=False,
@@ -103,7 +106,7 @@ window = np.pad(window, ([ll, len(ret_grating.pulse.F_THz) - ul]), constant_valu
 plt.plot(normalize(ret_grating.AW_ret.__abs__()))
 plt.plot(window)
 
-# %%
+# %% ___________________________________________________________________________________________________________________
 ret_hnlf.retrieve(corr_for_pm=True,
                   start_time_fs=None,
                   end_time_fs=None,

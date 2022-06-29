@@ -10,7 +10,7 @@ import pyfftw
 import PullDataFromOSA as osa
 import copy
 import clipboard_and_style_sheet
-from scipy.signal.windows import tukey
+from scipy.signal.windows import tukey, hanning
 
 bbo = BBO.BBOSHG()
 
@@ -613,7 +613,8 @@ class Retrieval:
             wl_um = self.pulse.wl_um
 
             ind_allowed = np.logical_and(wl_um >= ll_um, wl_um <= ul_um).nonzero()[0]
-            window_forbidden = tukey(len(ind_allowed), alpha=0.25)
+            window_forbidden = tukey(len(ind_allowed))
+            # window_forbidden = hanning(len(ind_allowed))
             window_forbidden = np.pad(window_forbidden, (ind_allowed[0], len(wl_um) - 1 - ind_allowed[-1]),
                                       constant_values=0.0)
 
