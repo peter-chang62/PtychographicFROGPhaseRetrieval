@@ -130,6 +130,8 @@ pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10,
 
 # %% ___________________________________________________________________________________________________________________
 # scale the experimental spectrogram to match the pulse energy
+# I do this based on the integrated area under the intensity autocorrelation
+# the time axis for integration is in ps
 autocorr = ss.convolve(abs(pulse.AT) ** 2, abs(pulse.AT[::-1]) ** 2, mode='same')
 autocorr_integral = scint.simpson(autocorr, x=pulse.T_ps)
 x_integral = scint.simpson(x, x=T_fs * 1e-3)
