@@ -82,7 +82,15 @@ def calculate_spectrogram(pulse, T_fs):
 
 
 def denoise(x, gamma):
-    return np.where(abs(x) >= gamma, x - gamma * np.sign(x), 0)
+    # this is how Sidorenko has it implemented in his code, the one difference
+    # is that the threshold condition is on abs(x), and then x - gamma * sign(x) is
+    # applied to the real and imaginary parts separately
+    # *** Note:
+    #   np.sign(x) operates on the real only if you pass it a complex x:
+    #   np.sign(1 + 1j) = 1 + 0j
+    # ***
+    return np.where(abs(x) >= gamma, x.real - gamma * np.sign(x.real), 0) + \
+           1j * np.where(abs(x) >= gamma, x.imag - gamma * np.sign(x.imag), 0)
 
 
 # %% ___________________________________________________________________________________________________________________
