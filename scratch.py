@@ -15,13 +15,20 @@ import scipy.signal.windows as wd
 # ______________________________________________________________________________________________________________________
 
 def normalize(x):
+    """
+    :param x: normalizes the array x by abs(max(x))
+    :return: normalized x
+    """
     return x / np.max(abs(x))
 
 
 def ifft(x, axis=None):
     """
-    calculates the 1D fft of the numpy array x
-    if x is not 1D you need to specify the axis
+    :param x: 1D or 2D array
+    :param axis: if 2D array, specify which axis to perform the ifft
+    :return: ifft of x
+
+    calculates the 1D fft of the numpy array x if x is not 1D you need to specify the axis
     """
 
     if (len(x.shape) > 1) and (axis is None):
@@ -35,8 +42,11 @@ def ifft(x, axis=None):
 
 def fft(x, axis=None):
     """
-    calculates the 1D ifft of the numpy array x
-    if x is not 1D you need to specify the axis
+    :param x: 1D or 2D array
+    :param axis: if 2D array, specify which axis to perform the fft
+    :return: fft of x
+
+    calculates the 1D ifft of the numpy array x if x is not 1D you need to specify the axis
     """
 
     if (len(x.shape) > 1) and (axis is None):
@@ -48,28 +58,53 @@ def fft(x, axis=None):
         return np.fft.fftshift(mkl_fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis), axes=axis)
 
 
-def shift(x, freq, shift, axis=None):
+def shift(x, freq, shift, axis=None, freq_is_angular=True):
+    """
+    :param x: 1D or 2D array
+    :param freq: frequency axis
+    :param shift: time shift
+    :param axis: if x is 2D, the axis along which to perform the shift
+    :param freq_is_angular: bool specifying whether freq is in angular frequency, default is True
+    :return: shifted x
+
+    The units of freq and shift can be anything, but they need to be consistent with each other (so if freq is in
+    THz, then shift should be in ps)
+    """
+
     if (len(x.shape) > 1) and (axis is None):
         raise AssertionError("if x has shape >1D you need to provide an axis along which to perform the shift")
+
+    assert isinstance(freq_is_angular, bool)
 
     phase = np.zeros(x.shape, dtype=np.complex128)
     ft = fft(x, axis)
 
+    if freq_is_angular:
+        V = freq
+    else:
+        V = freq * 2 * np.pi
+
     if axis is None:
         # 1D scenario
-        phase[:] = np.exp(1j * 2 * np.pi * freq * shift)
+        phase[:] = np.exp(1j * V * shift)
         ft *= phase
         return ifft(ft).real
 
     else:
         assert shift.shape == (x.shape[0],), "shift must be a 1D array, one shift for each row of x"
-        phase[:] = 1j * 2 * np.pi * freq
+        phase[:] = 1j * V
         phase = np.exp(phase * np.c_[shift])
         ft *= phase
         return ifft(ft, axis).real
 
 
 def calculate_spectrogram(pulse, T_fs):
+    """
+    :param pulse: pulse instance
+    :param T_fs: Time axis of the spectrogram
+    :return: 2D array for the spectrogram
+    """
+
     assert isinstance(pulse, fpn.Pulse), "pulse must be a Pulse instance"
     pulse: fpn.Pulse
 
@@ -82,6 +117,12 @@ def calculate_spectrogram(pulse, T_fs):
 
 
 def denoise(x, gamma):
+    """
+    :param x: array
+    :param gamma: float that is the threshold
+    :return: denoised x
+    """
+
     # this is how Sidorenko has it implemented in his code, the one difference is that the threshold condition is on
     # abs(x), and then x - gamma * sign(x) is applied to the real and imaginary parts separately
     # Note: ____________________________________________________________________________________________________________
@@ -116,10 +157,10 @@ T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 #   suppressed there. so I divide through by the phase-matching curve wherever the spectrogram is above .001x its max,
 #   and otherwise I set it to 0
 
-# bbo = BBO.BBOSHG()
-# R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
-# for n, spectrum in enumerate(spectrogram):
-#     spectrogram[n] = np.where(R > 1e-3, spectrogram[n] / R, 0)
+bbo = BBO.BBOSHG()
+R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
+for n, spectrum in enumerate(spectrogram):
+    spectrogram[n] = np.where(R > 1e-3, spectrogram[n] / R, 0)
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
@@ -127,7 +168,7 @@ x = - scint.simpson(spectrogram, x=F_THz, axis=1)
 spl = spi.UnivariateSpline(T_fs, normalize(x) - .5, s=0)
 roots = spl.roots()
 assert len(roots) == 2, "there should only be two roots, otherwise your autocorrelation is weird"
-T0 = np.diff(roots) * 0.65
+T0 = np.diff(roots) * 0.65 / 1.76
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
@@ -178,7 +219,7 @@ for n in range(itermax):
         AT_shift[:] = shift(pulse.AT, pulse.V_THz, dt)
         psi_j[:] = pulse.AT * AT_shift
         PHI_j[:] = fft(psi_j)
-        amp[:] = spectrogram_interp[index] ** 0.5 * wd.tukey(len(amp))
+        amp[:] = spectrogram_interp[index] ** 0.5
         phase[:] = np.arctan2(PHI_j.imag, PHI_j.real)
         PHI_j[ind_fthz] = amp * np.exp(1j * phase[ind_fthz])
         psi_j_prime[:] = ifft(PHI_j)
