@@ -88,14 +88,14 @@ def shift(x, freq, shift, axis=None, freq_is_angular=True):
         # 1D scenario
         phase[:] = np.exp(1j * V * shift)
         ft *= phase
-        return ifft(ft).real
+        return ifft(ft)
 
     else:
         assert shift.shape == (x.shape[0],), "shift must be a 1D array, one shift for each row of x"
         phase[:] = 1j * V
         phase = np.exp(phase * np.c_[shift])
         ft *= phase
-        return ifft(ft, axis).real
+        return ifft(ft, axis)
 
 
 def calculate_spectrogram(pulse, T_fs):
@@ -139,7 +139,7 @@ def denoise(x, gamma):
 spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")
 T_fs = spectrogram[:, 0][1:]  # time is on the row
 wl_nm = spectrogram[0][1:]  # wavelength is on the column
-F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)
+F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
 spectrogram = spectrogram[1:, 1:]
 
 # center T0
@@ -154,8 +154,7 @@ T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 # %% ___________________________________________________________________________________________________________________
 # divide through by the phase-matching curve:
 #   the phase-matching curve has 0 points which gives division errors. The spectrogram, however, should be heavily
-#   suppressed there. so I divide through by the phase-matching curve wherever the spectrogram is above .001x its max,
-#   and otherwise I set it to 0
+#   suppressed there. so I divide through by the phase-matching curve wherever R > .001, and otherwise I set it to 0
 
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
@@ -164,7 +163,7 @@ for n, spectrum in enumerate(spectrogram):
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
-x = - scint.simpson(spectrogram, x=F_THz, axis=1)
+x = - scint.simpson(spectrogram, x=F_THz, axis=1)  # integrate experimental spectrogram across wavelength axis
 spl = spi.UnivariateSpline(T_fs, normalize(x) - .5, s=0)
 roots = spl.roots()
 assert len(roots) == 2, "there should only be two roots, otherwise your autocorrelation is weird"
@@ -172,17 +171,18 @@ T0 = np.diff(roots) * 0.65 / 1.76
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
-# scale the experimental spectrogram to match the pulse energy
-# I do this based on the integrated area under the intensity autocorrelation
-x = calculate_spectrogram(pulse, T_fs)
-factor = scint.simpson(scint.simpson(x)) / scint.simpson(scint.simpson(spectrogram))
-spectrogram *= factor
-
-# %% ___________________________________________________________________________________________________________________
 # interpolate the spectrogram onto the simulation grid
 ind_fthz = np.logical_and(pulse.F_THz * 2 >= min(F_THz), pulse.F_THz * 2 <= max(F_THz)).nonzero()[0]
 gridded = spi.interp2d(F_THz, T_fs, spectrogram)
 spectrogram_interp = gridded(pulse.F_THz[ind_fthz] * 2, T_fs)
+
+# %% ___________________________________________________________________________________________________________________
+# scale the interpolated spectrogram to match the pulse energy
+# I do it here instead of to the experimental spectrogram, because the
+# interpolated spectrogram has the same integration frequency axis as the pulse instance
+x = calculate_spectrogram(pulse, T_fs)
+factor = scint.simpson(scint.simpson(x[:, ind_fthz])) / scint.simpson(scint.simpson(spectrogram_interp))
+spectrogram_interp *= factor
 
 # %% ___________________________________________________________________________________________________________________
 # times to iterate over
@@ -194,45 +194,54 @@ delay_time = T_fs[ind_start:ind_end]
 time_order_ps = np.c_[delay_time * 1e-3, np.arange(ind_start, ind_end)]
 
 # %% ___________________________________________________________________________________________________________________
+# From here we should be ready for phase retrieval!
+# %% ___________________________________________________________________________________________________________________
+
 # phase retrieval based on:
 #   [1] P. Sidorenko, O. Lahav, Z. Avnat, and O. Cohen, Ptychographic Reconstruction Algorithm for Frequency-Resolved
 #   Optical Gating: Super-Resolution and Supreme Robustness, Optica 3, 1320 (2016).
 
+j_excl = np.ones(len(pulse.F_THz))
+j_excl[ind_fthz] = 0
+j_excl = j_excl.nonzero()[0]  # everything but ind_fthz
+
+itermax = 40
+error = np.zeros(itermax)
 rng = np.random.default_rng()
-psi_j = np.zeros(pulse.AT.shape, pulse.AT.dtype)
-psi_j_prime = np.zeros(pulse.AT.shape, pulse.AT.dtype)
-PHI_j = np.zeros(pulse.AT.shape, pulse.AT.dtype)
-AT_shift = np.zeros(pulse.AT.shape, pulse.AT.dtype)
-amp = np.zeros(len(ind_fthz))
-phase = np.zeros(pulse.AT.shape)
-itermax = 100
+
+AT = np.zeros((itermax, len(pulse.AT)), dtype=np.complex128)
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
 ax3 = ax2.twinx()
 
-for n in range(itermax):
+for iter in range(itermax):
     rng.shuffle(time_order_ps, axis=0)
     alpha = abs(0.2 + rng.standard_normal(1) / 20)
-    for dt, index in time_order_ps:
-        index = int(index)
+    for dt, j in time_order_ps:
+        j = int(j)
 
-        AT_shift[:] = shift(pulse.AT, pulse.V_THz, dt)
-        psi_j[:] = pulse.AT * AT_shift
-        PHI_j[:] = fft(psi_j)
-        amp[:] = spectrogram_interp[index] ** 0.5
-        phase[:] = np.arctan2(PHI_j.imag, PHI_j.real)
-        PHI_j[ind_fthz] = amp * np.exp(1j * phase[ind_fthz])
-        psi_j_prime[:] = ifft(PHI_j)
+        AT_shift = shift(pulse.AT, pulse.V_THz, dt)
+        psi_j = AT_shift * pulse.AT
+        phi_j = fft(psi_j)
+        amp = abs(phi_j)
+        amp[ind_fthz] = np.sqrt(spectrogram_interp[j])
+        phase = np.arctan2(phi_j.imag, phi_j.real)
+        phi_j[:] = amp * np.exp(1j * phase)
+        phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3)
+        psi_jp = ifft(phi_j)
+        corr1 = AT_shift.conj() * (psi_jp - psi_j) / np.max(abs(AT_shift) ** 2)
         pulse.set_AT(
-            pulse.AT + alpha * AT_shift.conj() * (psi_j_prime - psi_j) / np.max(abs(AT_shift) ** 2)
+            pulse.AT + alpha * corr1
         )
 
-    ax1.clear()
-    ax2.clear()
-    ax3.clear()
-    ax1.plot(pulse.T_ps, abs(pulse.AT) ** 2)
-    ax2.plot(pulse.F_THz, abs(pulse.AW) ** 2)
+    [ax.clear() for ax in [ax1, ax2, ax3]]
+    ax1.plot(pulse.T_ps, pulse.AT.__abs__() ** 2)
+    ax2.plot(pulse.F_THz, pulse.AW.__abs__() ** 2)
     ax3.plot(pulse.F_THz, np.unwrap(np.arctan2(pulse.AW.imag, pulse.AW.real)), color='C1')
-    fig.suptitle(n)
     plt.pause(.1)
-    print(n, pulse.calc_epp())
+
+    s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
+    error[iter] = np.sum(abs(s - spectrogram_interp))
+    AT[iter] = pulse.AT
+
+    print(iter, error[iter])
