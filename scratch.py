@@ -7,6 +7,7 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.integrate as scint
 import scipy.interpolate as spi
 import scipy.constants as sc
+import warnings
 import scipy.signal.windows as wd
 
 
@@ -135,8 +136,9 @@ def denoise(x, gamma):
 
 # %% ___________________________________________________________________________________________________________________
 # load the experimental data
-# spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
-spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")
+# spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")
+spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
+# spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")
 T_fs = spectrogram[:, 0][1:]  # time is on the row
 wl_nm = spectrogram[0][1:]  # wavelength is on the column
 F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
@@ -152,22 +154,26 @@ T_fs -= T_fs[ind]
 T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 
 # %% ___________________________________________________________________________________________________________________
-# divide through by the phase-matching curve:
-#   the phase-matching curve has 0 points which gives division errors. The spectrogram, however, should be heavily
-#   suppressed there. so I divide through by the phase-matching curve wherever R > .001, and otherwise I set it to 0
+# denoise the spectrogram, I think it helps
+spectrogram = normalize(spectrogram)
+spectrogram = denoise(spectrogram, 1e-3).real
+
+# %% ___________________________________________________________________________________________________________________
+# divide through by the phase-matching curve: the phase-matching curve has 0 points which gives division errors. The
+# spectrogram, however, should be heavily suppressed there. So, I divide through by the phase-matching curve wherever
+# spectrogram >= 1e-3 its max, and otherwise I set it to 0
 
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
 for n, spectrum in enumerate(spectrogram):
-    spectrogram[n] = np.where(R > 1e-3, spectrogram[n] / R, 0)
+    spectrogram[n] = np.where(spectrogram[n] >= 1e-3 * spectrogram.max(), spectrogram[n] / R, 0)
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
 x = - scint.simpson(spectrogram, x=F_THz, axis=1)  # integrate experimental spectrogram across wavelength axis
 spl = spi.UnivariateSpline(T_fs, normalize(x) - .5, s=0)
 roots = spl.roots()
-assert len(roots) == 2, "there should only be two roots, otherwise your autocorrelation is weird"
-T0 = np.diff(roots) * 0.65 / 1.76
+T0 = np.diff(roots[[0, -1]]) * 0.65 / 1.76
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
@@ -230,18 +236,22 @@ for iter in range(itermax):
         phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3)
         psi_jp = ifft(phi_j)
         corr1 = AT_shift.conj() * (psi_jp - psi_j) / np.max(abs(AT_shift) ** 2)
+        corr2 = pulse.AT.conj() * (psi_jp - psi_j) / np.max(abs(pulse.AT) ** 2)
+        corr2 = shift(corr2, pulse.V_THz, -dt)
         pulse.set_AT(
             pulse.AT + alpha * corr1
+            + alpha * corr2
         )
 
     [ax.clear() for ax in [ax1, ax2, ax3]]
     ax1.plot(pulse.T_ps, pulse.AT.__abs__() ** 2)
     ax2.plot(pulse.F_THz, pulse.AW.__abs__() ** 2)
     ax3.plot(pulse.F_THz, np.unwrap(np.arctan2(pulse.AW.imag, pulse.AW.real)), color='C1')
+    ax2.set_xlim(188, 198)
     plt.pause(.1)
 
     s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
-    error[iter] = np.sum(abs(s - spectrogram_interp))
+    error[iter] = np.sqrt(np.sum(abs(s - spectrogram_interp) ** 2)) / np.sqrt(np.sum(abs(spectrogram_interp) ** 2))
     AT[iter] = pulse.AT
 
     print(iter, error[iter])
