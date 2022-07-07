@@ -138,6 +138,11 @@ def denoise(x, gamma):
 # spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")
 spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
 # spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")
+
+osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
+
+# %% ___________________________________________________________________________________________________________________
+# extract relevant variables
 T_fs = spectrogram[:, 0][1:]  # time is on the row
 wl_nm = spectrogram[0][1:]  # wavelength is on the column
 F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
@@ -176,8 +181,14 @@ T0 = np.diff(roots[[0, -1]]) * 0.65 / 1.76
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
-# interpolate the spectrogram onto the simulation grid
-ind_fthz = np.logical_and(pulse.F_THz * 2 >= min(F_THz), pulse.F_THz * 2 <= max(F_THz)).nonzero()[0]
+# Interpolate the spectrogram onto the simulation grid. Here we also set the frequency limits of the spectrogram to
+# use for retrieval. Setting this to be a small subset means that there are discontinuities during the replacement of
+# phi_j during the retrieval iterations. I'm not sure how to deal with this exactly, but I want to take a note of
+# this issue.
+
+# min_fthz, max_fthz = min(F_THz), max(F_THz)  # use the full wavelength range of the spectrometer
+min_fthz, max_fthz = 381, 387  # frequency limits of the spectrogram to use for retrieval
+ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_fthz, pulse.F_THz * 2 <= max_fthz).nonzero()[0]
 gridded = spi.interp2d(F_THz, T_fs, spectrogram)
 spectrogram_interp = gridded(pulse.F_THz[ind_fthz] * 2, T_fs)
 
@@ -192,7 +203,7 @@ spectrogram_interp *= factor
 # %% ___________________________________________________________________________________________________________________
 # times to iterate over
 start_time = 0  # fs
-end_time = 250  # fs
+end_time = 217  # fs
 ind_start = np.argmin(abs(T_fs - start_time))
 ind_end = np.argmin(abs(T_fs - end_time))
 delay_time = T_fs[ind_start:ind_end]
@@ -228,15 +239,24 @@ for iter in range(itermax):
         AT_shift = shift(pulse.AT, pulse.V_THz, dt)
         psi_j = AT_shift * pulse.AT
         phi_j = fft(psi_j)
+
         amp = abs(phi_j)
         amp[ind_fthz] = np.sqrt(spectrogram_interp[j])
         phase = np.arctan2(phi_j.imag, phi_j.real)
         phi_j[:] = amp * np.exp(1j * phase)
-        phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3)
+
+        # denoise everything that is not inside the wavelength range of the spectrogram that is being used for
+        # retrieval. Intuitively, this is all the frequencies that you don't think the spectrogram gives reliable
+        # results for. The threshold is the max of phi_j / 1000. Otherwise, depending on what pulse energy you
+        # decided to run with during retrieval, the 1e-3 threshold can do different things. Intuitively,
+        # the threshold should be set close to the noise floor, which is determined by the maximum.
+        phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3 * abs(phi_j).max())
+
         psi_jp = ifft(phi_j)
         corr1 = AT_shift.conj() * (psi_jp - psi_j) / np.max(abs(AT_shift) ** 2)
         corr2 = pulse.AT.conj() * (psi_jp - psi_j) / np.max(abs(pulse.AT) ** 2)
         corr2 = shift(corr2, pulse.V_THz, -dt)
+
         pulse.set_AT(
             pulse.AT + alpha * corr1
             + alpha * corr2
