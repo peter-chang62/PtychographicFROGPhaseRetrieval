@@ -166,9 +166,9 @@ spectrogram = normalize(spectrogram)
 spl = spi.UnivariateSpline(F_THz[::-1], spectrogram[len(spectrogram) // 2][::-1] - .01, s=0)
 roots = spl.roots()
 min_fthz, max_fthz = min(roots), max(roots)
-ind_fthz_sig = np.logical_and(F_THz >= min_fthz, F_THz <= max_fthz)
+mask_fthz_sig = np.logical_and(F_THz >= min_fthz, F_THz <= max_fthz)
 ind_fthz_nosig = np.ones(len(F_THz))
-ind_fthz_nosig[ind_fthz_sig] = 0
+ind_fthz_nosig[mask_fthz_sig] = 0
 ind_fthz_nosig = ind_fthz_nosig.nonzero()[0]
 
 # %% ___________________________________________________________________________________________________________________
