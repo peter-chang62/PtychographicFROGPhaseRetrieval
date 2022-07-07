@@ -285,7 +285,7 @@ for iter in range(itermax):
         )
 
         # ______________________________________________________________________________________________________________
-        # subsitution of power spectrum
+        # substitution of power spectrum
         # if iter > 10:
         #     phase = np.arctan2(pulse.AW.imag, pulse.AW.real)
         #     epp = pulse.calc_epp()
