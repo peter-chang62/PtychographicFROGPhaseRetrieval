@@ -136,12 +136,16 @@ def denoise(x, gamma):
 
 # %% ___________________________________________________________________________________________________________________
 # load the experimental data
-spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")
-# spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
-# spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")
+spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")  # simulated frog
+# spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
+# spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
 
 # %% ___________________________________________________________________________________________________________________
-# extract relevant variables
+# extract relevant variables from the spectrogram data:
+#   1. time axis
+#   2. wavelength axis
+#   3. frequency axis
+
 T_fs = spectrogram[:, 0][1:]  # time is on the row
 wl_nm = spectrogram[0][1:]  # wavelength is on the column
 F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
@@ -157,7 +161,7 @@ T_fs -= T_fs[ind]
 T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 
 # %% ___________________________________________________________________________________________________________________
-# where there is signal
+# determine where you had FROG signal
 spectrogram = normalize(spectrogram)
 spl = spi.UnivariateSpline(F_THz[::-1], spectrogram[len(spectrogram) // 2][::-1] - .01, s=0)
 roots = spl.roots()
@@ -174,7 +178,7 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 # %% ___________________________________________________________________________________________________________________
 # divide through by the phase-matching curve: the phase-matching curve has 0 points which gives division errors. The
 # spectrogram, however, should be heavily suppressed there. So, I divide through by the phase-matching curve wherever
-# spectrogram >= 1e-3 its max, and otherwise I set it to 0
+# both the spectrogram >= 1e-3 its max and R >= 1e-3, and otherwise I set it to 0
 
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), np.arctan(.22 / 2))  # 5 deg incidence?
@@ -204,6 +208,8 @@ pulse_data.set_AW_experiment(osa.x * 1e-3, np.where(osa.y >= 0, np.sqrt(osa.y), 
 
 # min_fthz, max_fthz = min(F_THz), 610  # 610 THz is where the phase-matching has dropped by a lot
 min_fthz, max_fthz = 356, 400
+assert all([min(F_THz) <= min_fthz <= max(F_THz), min(F_THz) <= max_fthz <= max(F_THz)]), \
+    "your provided frequency limits need to be within the limits of the spectrometer's frequency axis"
 ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_fthz, pulse.F_THz * 2 <= max_fthz).nonzero()[0]
 gridded = spi.interp2d(F_THz, T_fs, spectrogram)
 spectrogram_interp = gridded(pulse.F_THz[ind_fthz] * 2, T_fs)
