@@ -183,8 +183,7 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), np.arctan(.22 / 2))  # 5 deg incidence?
 for n, spectrum in enumerate(spectrogram):
-    spectrogram[n] = np.where(np.logical_and(spectrogram[n] >= 1e-3 * spectrogram.max(), R >= 1e-3),
-                              spectrogram[n] / R, 0)
+    spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, 0)
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
