@@ -7,7 +7,6 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.integrate as scint
 import scipy.interpolate as spi
 import scipy.constants as sc
-import warnings
 import scipy.signal.windows as wd
 
 
