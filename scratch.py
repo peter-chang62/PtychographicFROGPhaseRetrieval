@@ -134,39 +134,49 @@ def denoise(x, gamma):
            1j * np.where(abs(x) >= gamma, x.imag - gamma * np.sign(x.imag), 0)
 
 
+def load_data(path):
+    """
+    :param path: str - path to data
+    :return: 1D array, 1D array, 1D array, 2D array - wavelength (nm), frequency (THz), spectrogram
+    """
+
+    # extract relevant variables from the spectrogram data:
+    #   1. time axis
+    #   2. wavelength axis
+    #   3. frequency axis
+
+    spectrogram = np.genfromtxt(path)
+    T_fs = spectrogram[:, 0][1:]  # time is on the row
+    wl_nm = spectrogram[0][1:]  # wavelength is on the column
+    F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
+    spectrogram = spectrogram[1:, 1:]
+
+    # center T0
+    x = scint.simps(spectrogram, axis=1)
+    ind = np.argmax(x)
+    ind_keep = min([ind, len(spectrogram) - ind])
+    spectrogram = spectrogram[ind - ind_keep: ind + ind_keep]
+    T_fs -= T_fs[ind]
+    T_fs = T_fs[ind - ind_keep: ind + ind_keep]
+
+    return wl_nm, F_THz, T_fs, normalize(spectrogram)
+
+
 # %% ___________________________________________________________________________________________________________________
 # load the experimental data
-# spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")  # simulated frog
-spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
-# spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
+# wl_nm, F_THz, T_fs, spectrogram = load_data("TestData/sanity_check_data.txt")  # simulated frog
+# min_sig_fthz, max_sig_fthz = 300, max(F_THz)
 
-# %% ___________________________________________________________________________________________________________________
-# extract relevant variables from the spectrogram data:
-#   1. time axis
-#   2. wavelength axis
-#   3. frequency axis
+wl_nm, F_THz, T_fs, spectrogram = load_data(
+    "Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
+min_sig_fthz, max_sig_fthz = 367, 400
 
-T_fs = spectrogram[:, 0][1:]  # time is on the row
-wl_nm = spectrogram[0][1:]  # wavelength is on the column
-F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
-spectrogram = spectrogram[1:, 1:]
-
-# center T0
-x = scint.simps(spectrogram, axis=1)
-center = len(x) // 2
-ind = np.argmax(x)
-ind_keep = min([ind, len(spectrogram) - ind])
-spectrogram = spectrogram[ind - ind_keep: ind + ind_keep]
-T_fs -= T_fs[ind]
-T_fs = T_fs[ind - ind_keep: ind + ind_keep]
+# wl_nm, F_THz, T_fs, spectrogram = load_data("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
+# min_sig_fthz, max_sig_fthz = 284, 620
 
 # %% ___________________________________________________________________________________________________________________
 # determine where you had FROG signal
-spectrogram = normalize(spectrogram)
-spl = spi.UnivariateSpline(F_THz[::-1], spectrogram[len(spectrogram) // 2][::-1] - 1e-2, s=0)
-roots = spl.roots()
-min_fthz, max_fthz = min(roots), max(roots)
-mask_fthz_sig = np.logical_and(F_THz >= min_fthz, F_THz <= max_fthz)
+mask_fthz_sig = np.logical_and(F_THz >= min_sig_fthz, F_THz <= max_sig_fthz)
 ind_fthz_nosig = np.ones(len(F_THz))
 ind_fthz_nosig[mask_fthz_sig] = 0
 ind_fthz_nosig = ind_fthz_nosig.nonzero()[0]
@@ -181,9 +191,18 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 # both the spectrogram >= 1e-3 its max and R >= 1e-3, and otherwise I set it to 0
 
 bbo = BBO.BBOSHG()
-R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
-for n, spectrum in enumerate(spectrogram):
-    spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, spectrum)
+
+# one method
+R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.5))  # 5 deg incidence?
+ind_10perc = np.argmin(abs(R[300:] - .1)) + 300
+spectrogram[:, ind_10perc:] /= R[ind_10perc:]
+spectrogram = normalize(spectrogram)
+spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).real
+
+# another method (don't see why it should be this complicated though)
+# R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), np.arctan(.22 / 2))  # 5 deg incidence?
+# for n, spectrum in enumerate(spectrogram):
+#     spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, spectrum)
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
@@ -191,6 +210,7 @@ x = - scint.simpson(spectrogram, x=F_THz, axis=1)  # integrate experimental spec
 spl = spi.UnivariateSpline(T_fs, normalize(x) - .5, s=0)
 roots = spl.roots()
 T0 = np.diff(roots[[0, -1]]) * 0.65 / 1.76
+T0 /= 20
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
@@ -199,17 +219,22 @@ osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
 pulse_data = copy.deepcopy(pulse)
 pulse_data.set_AW_experiment(osa.x * 1e-3, np.where(osa.y >= 0, np.sqrt(osa.y), 0))
 
+# pulse_data = copy.deepcopy(pulse)
+# data = np.load("TestData/sanity_check_data_spectrum.npy")
+# pulse_data.set_AW_experiment(data[:, 0], np.sqrt(data[:, 1]))
+
 # %% ___________________________________________________________________________________________________________________
 # Interpolate the spectrogram onto the simulation grid. Here we also set the frequency limits of the spectrogram to
 # use for retrieval. Setting this to be a small subset means that there are discontinuities during the replacement of
 # phi_j during the retrieval iterations. I'm not sure how to deal with this exactly, but I want to take a note of
 # this issue.
 
-# min_fthz, max_fthz = min(F_THz), 660  # 610 THz is where the phase-matching has dropped by a lot
-min_fthz, max_fthz = min(F_THz), 610
-assert all([min(F_THz) <= min_fthz <= max(F_THz), min(F_THz) <= max_fthz <= max(F_THz)]), \
+# min_intrp_fthz, max_intrp_fthz = min(F_THz), 660  # 610 THz is where the phase-matching has dropped by a lot
+# min_intrp_fthz, max_intrp_fthz = min(F_THz), F_THz[ind_10perc]
+min_intrp_fthz, max_intrp_fthz = min(F_THz), max(F_THz)
+assert all([min(F_THz) <= min_intrp_fthz <= max(F_THz), min(F_THz) <= max_intrp_fthz <= max(F_THz)]), \
     "your provided frequency limits need to be within the limits of the spectrometer's frequency axis"
-ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_fthz, pulse.F_THz * 2 <= max_fthz).nonzero()[0]
+ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_intrp_fthz, pulse.F_THz * 2 <= max_intrp_fthz).nonzero()[0]
 gridded = spi.interp2d(F_THz, T_fs, spectrogram)
 spectrogram_interp = gridded(pulse.F_THz[ind_fthz] * 2, T_fs)
 
@@ -285,7 +310,7 @@ for iter in range(itermax):
 
         # ______________________________________________________________________________________________________________
         # substitution of power spectrum
-        # if iter > 30:
+        # if iter > 0:
         #     phase = np.arctan2(pulse.AW.imag, pulse.AW.real)
         #     epp = pulse.calc_epp()
         #     pulse.set_AW(abs(pulse_data.AW) * np.exp(1j * phase))
@@ -296,7 +321,7 @@ for iter in range(itermax):
     ax1.plot(pulse.T_ps, pulse.AT.__abs__() ** 2)
     ax2.plot(pulse.F_THz, pulse.AW.__abs__() ** 2)
     ax3.plot(pulse.F_THz, np.unwrap(np.arctan2(pulse.AW.imag, pulse.AW.real)), color='C1')
-    ax2.set_xlim(188, 198)
+    ax2.set_xlim(min_sig_fthz / 2, max_sig_fthz / 2)
     plt.pause(.1)
 
     s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
@@ -310,7 +335,8 @@ pulse.set_AT(AT[np.argmin(error)])
 s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
 
 plt.figure()
-plt.plot(pulse.wl_um, normalize(pulse.AW.__abs__() ** 2))
-plt.plot(osa.x * 1e-3, normalize(osa.y))
+plt.plot(pulse.wl_um, pulse.AW.__abs__() ** 2)
+pulse_data.set_epp(pulse.calc_epp())
+plt.plot(pulse_data.wl_um, pulse_data.AW.__abs__() ** 2)
 plt.xlim(1.54, 1.58)
 # plt.xlim(1, 2)
