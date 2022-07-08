@@ -137,8 +137,8 @@ def denoise(x, gamma):
 # %% ___________________________________________________________________________________________________________________
 # load the experimental data
 # spectrogram = np.genfromtxt("TestData/sanity_check_data.txt")  # simulated frog
-# spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
-spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
+spectrogram = np.genfromtxt("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
+# spectrogram = np.genfromtxt("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
 
 # %% ___________________________________________________________________________________________________________________
 # extract relevant variables from the spectrogram data:
@@ -163,7 +163,7 @@ T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 # %% ___________________________________________________________________________________________________________________
 # determine where you had FROG signal
 spectrogram = normalize(spectrogram)
-spl = spi.UnivariateSpline(F_THz[::-1], spectrogram[len(spectrogram) // 2][::-1] - 1e-3, s=0)
+spl = spi.UnivariateSpline(F_THz[::-1], spectrogram[len(spectrogram) // 2][::-1] - 1e-2, s=0)
 roots = spl.roots()
 min_fthz, max_fthz = min(roots), max(roots)
 mask_fthz_sig = np.logical_and(F_THz >= min_fthz, F_THz <= max_fthz)
@@ -183,7 +183,7 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 bbo = BBO.BBOSHG()
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.0))  # 5 deg incidence?
 for n, spectrum in enumerate(spectrogram):
-    spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, 0)
+    spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, spectrum)
 
 # %% ___________________________________________________________________________________________________________________
 # initial guess is a sech pulse with duration based on intensity autocorrelation
@@ -205,8 +205,8 @@ pulse_data.set_AW_experiment(osa.x * 1e-3, np.where(osa.y >= 0, np.sqrt(osa.y), 
 # phi_j during the retrieval iterations. I'm not sure how to deal with this exactly, but I want to take a note of
 # this issue.
 
-min_fthz, max_fthz = min(F_THz), 610  # 610 THz is where the phase-matching has dropped by a lot
-# min_fthz, max_fthz = 356, 400
+# min_fthz, max_fthz = min(F_THz), 660  # 610 THz is where the phase-matching has dropped by a lot
+min_fthz, max_fthz = min(F_THz), 610
 assert all([min(F_THz) <= min_fthz <= max(F_THz), min(F_THz) <= max_fthz <= max(F_THz)]), \
     "your provided frequency limits need to be within the limits of the spectrometer's frequency axis"
 ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_fthz, pulse.F_THz * 2 <= max_fthz).nonzero()[0]
@@ -313,3 +313,4 @@ plt.figure()
 plt.plot(pulse.wl_um, normalize(pulse.AW.__abs__() ** 2))
 plt.plot(osa.x * 1e-3, normalize(osa.y))
 plt.xlim(1.54, 1.58)
+# plt.xlim(1, 2)
