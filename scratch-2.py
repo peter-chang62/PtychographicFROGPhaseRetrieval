@@ -271,16 +271,19 @@ class Retrieval:
         this frequency range, this is used purely for calling denoise on the spectrogram, and does not set the
         frequency range to be used for retrieval (that is instead set by the phase matching bandwidth)
         """
+
         self._min_sig_fthz, self._max_sig_fthz = float(min_sig_fthz), float(max_sig_fthz)
         self.denoise_spectrogram()
 
     def _get_ind_fthz_nosig(self):
         """
-        :return: an array of indices for the experimental wavelength axis falls inside the signal frequency
-        range (the one that is used to denoise the spectrogram)
+        :return: an array of integers
 
-        this can only be called after min_sig_fthz and max_sig_fthz have been set by set_signal_freq
+        This gets an array of indices for the experimental wavelength axis that falls inside the signal frequency
+        range (the one that is used to denoise the spectrogram). This can only be called after min_sig_fthz and
+        max_sig_fthz have been set by set_signal_freq
         """
+
         mask_fthz_sig = np.logical_and(self.F_THz >= self.min_sig_fthz, self.F_THz <= self.max_sig_fthz)
 
         ind_fthz_nosig = np.ones(len(self.F_THz))
@@ -376,7 +379,15 @@ class Retrieval:
         self._spectrogram_interp = spectrogram_interp
 
     def retrieve(self, start_time, end_time, itermax, iter_set=None):
-        assert (iter_set is None) or self.pulse_data
+        """
+        :param start_time:
+        :param end_time:
+        :param itermax:
+        :param iter_set:
+        :return:
+        """
+
+        assert (iter_set is None) or isinstance(self.pulse_data, fpn.Pulse)
 
         self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
                                            self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
