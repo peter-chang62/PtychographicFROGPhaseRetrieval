@@ -341,9 +341,11 @@ for iter in range(itermax):
 
     print(iter, error[iter])
 
-# %% ___________________________________________________________________________________________________________________
 pulse.set_AT(AT[np.argmin(error)])
 s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
+
+# %% ___________________________________________________________________________________________________________________
+# Done! plot the results
 
 plt.figure()
 plt.plot(pulse.wl_um, normalize(pulse.AW.__abs__() ** 2))
