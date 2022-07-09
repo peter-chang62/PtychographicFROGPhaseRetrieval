@@ -144,6 +144,7 @@ def load_data(path):
     #   1. time axis
     #   2. wavelength axis
     #   3. frequency axis
+    # no alteration to the data besides truncation of the time-axis to center T0 is done here
 
     spectrogram = np.genfromtxt(path)
     T_fs = spectrogram[:, 0][1:]  # time is on the row
@@ -164,18 +165,22 @@ def load_data(path):
 
 # %% ___________________________________________________________________________________________________________________
 # load the experimental data
+
+# sanity check data
 # wl_nm, F_THz, T_fs, spectrogram = load_data("TestData/sanity_check_data.txt")  # simulated frog
 # min_sig_fthz, max_sig_fthz = 300, max(F_THz)
 
+# grating pair output
 wl_nm, F_THz, T_fs, spectrogram = load_data(
-    "Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")  # grating pair output
+    "Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
 min_sig_fthz, max_sig_fthz = 367, 400
 
-# wl_nm, F_THz, T_fs, spectrogram = load_data("Data/01-17-2022/realigned_spectrometer_input.txt")  # hnlf output
+# hnlf input
+# wl_nm, F_THz, T_fs, spectrogram = load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
 # min_sig_fthz, max_sig_fthz = 284, 620
 
 # %% ___________________________________________________________________________________________________________________
-# determine where you had FROG signal
+# get indices for where you had FROG signal
 mask_fthz_sig = np.logical_and(F_THz >= min_sig_fthz, F_THz <= max_sig_fthz)
 ind_fthz_nosig = np.ones(len(F_THz))
 ind_fthz_nosig[mask_fthz_sig] = 0
@@ -187,20 +192,19 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 
 # %% ___________________________________________________________________________________________________________________
 # divide through by the phase-matching curve: the phase-matching curve has 0 points which gives division errors. The
-# spectrogram, however, should be heavily suppressed there. So, I divide through by the phase-matching curve wherever
-# both the spectrogram >= 1e-3 its max and R >= 1e-3, and otherwise I set it to 0
+# spectrogram, however, should be heavily suppressed there.
 
 bbo = BBO.BBOSHG()
 
 # one method
 R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.5))  # 5 deg incidence?
-ind_10perc = np.argmin(abs(R[300:] - .1)) + 300
+ind_10perc = np.argmin(abs(R[300:] - .1)) + 300  # the frog spectrogram doesn't usually extend past here
 spectrogram[:, ind_10perc:] /= R[ind_10perc:]
 spectrogram = normalize(spectrogram)
 spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).real
 
 # another method (don't see why it should be this complicated though)
-# R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), np.arctan(.22 / 2))  # 5 deg incidence?
+# R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), np.arctan(.22 / 2))
 # for n, spectrum in enumerate(spectrogram):
 #     spectrogram[n] = np.where(np.logical_and(spectrum >= 1e-3, R >= 1e-3), spectrum / R, spectrum)
 
@@ -210,7 +214,6 @@ x = - scint.simpson(spectrogram, x=F_THz, axis=1)  # integrate experimental spec
 spl = spi.UnivariateSpline(T_fs, normalize(x) - .5, s=0)
 roots = spl.roots()
 T0 = np.diff(roots[[0, -1]]) * 0.65 / 1.76
-T0 /= 20
 pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=1560, time_window_ps=10, NPTS=2 ** 12)
 
 # %% ___________________________________________________________________________________________________________________
@@ -229,11 +232,12 @@ pulse_data.set_AW_experiment(osa.x * 1e-3, np.where(osa.y >= 0, np.sqrt(osa.y), 
 # phi_j during the retrieval iterations. I'm not sure how to deal with this exactly, but I want to take a note of
 # this issue.
 
-# min_intrp_fthz, max_intrp_fthz = min(F_THz), 660  # 610 THz is where the phase-matching has dropped by a lot
-# min_intrp_fthz, max_intrp_fthz = min(F_THz), F_THz[ind_10perc]
-min_intrp_fthz, max_intrp_fthz = min(F_THz), max(F_THz)
+min_intrp_fthz, max_intrp_fthz = min(F_THz), F_THz[ind_10perc]  # where you have good phase matching bandwidth
+# min_intrp_fthz, max_intrp_fthz = min(F_THz), max(F_THz) # full frequency axis
+
 assert all([min(F_THz) <= min_intrp_fthz <= max(F_THz), min(F_THz) <= max_intrp_fthz <= max(F_THz)]), \
     "your provided frequency limits need to be within the limits of the spectrometer's frequency axis"
+
 ind_fthz = np.logical_and(pulse.F_THz * 2 >= min_intrp_fthz, pulse.F_THz * 2 <= max_intrp_fthz).nonzero()[0]
 gridded = spi.interp2d(F_THz, T_fs, spectrogram)
 spectrogram_interp = gridded(pulse.F_THz[ind_fthz] * 2, T_fs)
@@ -267,7 +271,9 @@ j_excl = np.ones(len(pulse.F_THz))
 j_excl[ind_fthz] = 0
 j_excl = j_excl.nonzero()[0]  # everything but ind_fthz
 
-itermax = 40
+itermax = 70
+iter_set = 30  # if constraining power spectrum
+
 error = np.zeros(itermax)
 rng = np.random.default_rng()
 
@@ -309,19 +315,24 @@ for iter in range(itermax):
         )
 
         # ______________________________________________________________________________________________________________
-        # substitution of power spectrum
-        # if iter > 0:
+        # substitution of power spectrum, comment out if not doing this
+        # if iter >= iter_set:
         #     phase = np.arctan2(pulse.AW.imag, pulse.AW.real)
-        #     epp = pulse.calc_epp()
         #     pulse.set_AW(abs(pulse_data.AW) * np.exp(1j * phase))
-        #     pulse.set_epp(epp)
         # ______________________________________________________________________________________________________________
+
+    # __________________________________________________________________________________________________________________
+    # preparing for substitution of power spectrum
+    if iter == iter_set - 1:  # the one before iter_set
+        pulse_data.set_epp(pulse.calc_epp())
+    # __________________________________________________________________________________________________________________
 
     [ax.clear() for ax in [ax1, ax2, ax3]]
     ax1.plot(pulse.T_ps, pulse.AT.__abs__() ** 2)
     ax2.plot(pulse.F_THz, pulse.AW.__abs__() ** 2)
     ax3.plot(pulse.F_THz, np.unwrap(np.arctan2(pulse.AW.imag, pulse.AW.real)), color='C1')
     ax2.set_xlim(min_sig_fthz / 2, max_sig_fthz / 2)
+    fig.suptitle(iter)
     plt.pause(.1)
 
     s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
@@ -335,8 +346,8 @@ pulse.set_AT(AT[np.argmin(error)])
 s = calculate_spectrogram(pulse, T_fs)[:, ind_fthz]
 
 plt.figure()
-plt.plot(pulse.wl_um, pulse.AW.__abs__() ** 2)
+plt.plot(pulse.wl_um, normalize(pulse.AW.__abs__() ** 2))
 pulse_data.set_epp(pulse.calc_epp())
-plt.plot(pulse_data.wl_um, pulse_data.AW.__abs__() ** 2)
+plt.plot(pulse_data.wl_um, normalize(pulse_data.AW.__abs__() ** 2))
 plt.xlim(1.54, 1.58)
 # plt.xlim(1, 2)
