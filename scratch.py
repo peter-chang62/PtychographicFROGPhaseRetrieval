@@ -197,7 +197,7 @@ spectrogram[:, ind_fthz_nosig] = denoise(spectrogram[:, ind_fthz_nosig], 1e-3).r
 bbo = BBO.BBOSHG()
 
 # one method
-R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.5))  # 5 deg incidence?
+R = bbo.R(wl_nm * 1e-3 * 2, 50, bbo.phase_match_angle_rad(1.55), BBO.deg_to_rad(5.5))  # 5.5 deg incidence?
 ind_10perc = np.argmin(abs(R[300:] - .1)) + 300  # the frog spectrogram doesn't usually extend past here
 spectrogram[:, ind_10perc:] /= R[ind_10perc:]
 spectrogram = normalize(spectrogram)
