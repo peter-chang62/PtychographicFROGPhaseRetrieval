@@ -353,7 +353,7 @@ class Retrieval:
 
         # when converting dB to linear scale for data taken by the monochromator, sometimes you get negative
         # values at wavelengths where you have no (or very little) power (experimental error)
-        assert np.all(spectrum > 0)
+        assert np.all(spectrum > 0), "a negative spectrum is not physical"
 
         pulse_data: fpn.Pulse
         pulse_data = copy.deepcopy(self.pulse)
@@ -384,10 +384,9 @@ class Retrieval:
         :param end_time:
         :param itermax:
         :param iter_set:
-        :return:
         """
 
-        assert (iter_set is None) or isinstance(self.pulse_data, fpn.Pulse)
+        assert (iter_set is None) or (isinstance(self.pulse_data, fpn.Pulse) and isinstance(iter_set, int))
 
         self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
                                            self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
@@ -426,11 +425,12 @@ class Retrieval:
                 phase = np.arctan2(phi_j.imag, phi_j.real)
                 phi_j[:] = amp * np.exp(1j * phase)
 
-                # denoise everything that is not inside the wavelength range of the spectrogram that is being used for
-                # retrieval. Intuitively, this is all the frequencies that you don't think the spectrogram gives reliable
-                # results for. The threshold is the max of phi_j / 1000. Otherwise, depending on what pulse energy you
-                # decided to run with during retrieval, the 1e-3 threshold can do different things. Intuitively,
-                # the threshold should be set close to the noise floor, which is determined by the maximum.
+                # denoise everything that is not inside the wavelength range of the spectrogram that is being used
+                # for retrieval. Intuitively, this is all the frequencies that you don't think the spectrogram gives
+                # reliable results for. The threshold is the max of phi_j / 1000. Otherwise, depending on what pulse
+                # energy you decided to run with during retrieval, the 1e-3 threshold can do different things.
+                # Intuitively, the threshold should be set close to the noise floor, which is determined by the
+                # maximum.
                 phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3 * abs(phi_j).max())
 
                 psi_jp = ifft(phi_j)
@@ -439,7 +439,8 @@ class Retrieval:
                 corr2 = shift(corr2, self.pulse.V_THz, -dt)
 
                 self.pulse.set_AT(
-                    self.pulse.AT + alpha * corr1
+                    self.pulse.AT
+                    + alpha * corr1
                     + alpha * corr2
                 )
 
@@ -476,10 +477,53 @@ class Retrieval:
         self._error = error
         self._AT2D = AT
 
+    def plot_results(self, set_to_best=True):
+        if set_to_best:
+            self.pulse.set_AT(self.AT2D[np.argmin(self.error)])
+
+        fig, ax = plt.subplots(2, 2)
+        ax = ax.flatten()
+
+        # plot time domain
+        ax[0].plot(self.pulse.T_ps, self.pulse.AT.__abs__() ** 2)
+
+        # plot frequency domain
+        ax[1].plot(self.pulse.F_THz, self.pulse.AW.__abs__() ** 2)
+        ax[1].set_xlim(self.min_sig_fthz / 2, self.max_sig_fthz / 2)
+
+        # plot the phase on same plot as frequency domain
+        axp = ax[1].twinx()
+        ind_sig = np.logical_and(self.pulse.F_THz * 2 >= self.min_sig_fthz,
+                                 self.pulse.F_THz * 2 <= self.max_sig_fthz).nonzero()[0]
+        phase = BBO.rad_to_deg(np.unwrap(np.arctan2(self.pulse.AW[ind_sig].imag,
+                                                    self.pulse.AW[ind_sig].real)))
+        axp.plot(self.pulse.F_THz[ind_sig], phase, color='C1')
+
+        # plot the experimental spectrogram
+        ax[2].pcolormesh(self.T_fs, self.F_THz / 2, self.spectrogram.T, cmap='jet')
+        ax[2].set_ylim(self.min_sig_fthz / 2, self.max_sig_fthz / 2)
+
+        # plot the retrieved spectrogram
+        s = calculate_spectrogram(self.pulse, self.T_fs)
+        ind_spctrmtr = np.logical_and(self.pulse.F_THz * 2 >= min(self.F_THz),
+                                      self.pulse.F_THz * 2 <= max(self.F_THz)).nonzero()[0]
+        ax[3].pcolormesh(self.T_fs, self.pulse.F_THz[ind_spctrmtr], s[:, ind_spctrmtr].T, cmap='jet')
+        ax[3].set_ylim(self.min_sig_fthz / 2, self.max_sig_fthz / 2)
+
+        # plot the experimental power spectrum
+        if isinstance(self._pulse_data, fpn.Pulse):
+            factor = max(self.pulse.AW.__abs__() ** 2) / max(self.pulse_data.AW.__abs__() ** 2)
+            ax[1].plot(self.pulse_data.F_THz, self.pulse_data.AW.__abs__() ** 2 * factor, color='C2')
+
+
+osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
+osa.y = abs(osa.y)
 
 ret = Retrieval()
 ret.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
 ret.set_signal_freq(367, 400)
-ret.correct_for_phase_matching(deg=5.5)
+ret.correct_for_phase_matching()
 ret.set_initial_guess(1560, 10, 2 ** 12)
-ret.retrieve(0, 250, 70)
+ret.load_spectrum_data(osa.x * 1e-3, osa.y)
+ret.retrieve(0, 250, 70, iter_set=None)
+ret.plot_results()
