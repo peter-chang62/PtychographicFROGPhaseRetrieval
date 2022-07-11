@@ -378,7 +378,7 @@ class Retrieval:
         spectrogram_interp *= factor
         self._spectrogram_interp = spectrogram_interp
 
-    def retrieve(self, start_time, end_time, itermax, iter_set=None):
+    def retrieve(self, start_time, end_time, itermax, iter_set=None, plot_update=True):
         """
         :param start_time:
         :param end_time:
@@ -407,8 +407,9 @@ class Retrieval:
 
         AT = np.zeros((itermax, len(self.pulse.AT)), dtype=np.complex128)
 
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        ax3 = ax2.twinx()
+        if plot_update:
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            ax3 = ax2.twinx()
 
         for iter in range(itermax):
             rng.shuffle(time_order_ps, axis=0)
@@ -459,13 +460,14 @@ class Retrieval:
                     self.pulse_data.set_epp(self.pulse.calc_epp())
             # __________________________________________________________________________________________________________________
 
-            [ax.clear() for ax in [ax1, ax2, ax3]]
-            ax1.plot(self.pulse.T_ps, self.pulse.AT.__abs__() ** 2)
-            ax2.plot(self.pulse.F_THz, self.pulse.AW.__abs__() ** 2)
-            ax3.plot(self.pulse.F_THz, np.unwrap(np.arctan2(self.pulse.AW.imag, self.pulse.AW.real)), color='C1')
-            ax2.set_xlim(self.min_sig_fthz / 2, self.max_sig_fthz / 2)
-            fig.suptitle(iter)
-            plt.pause(.1)
+            if plot_update:
+                [ax.clear() for ax in [ax1, ax2, ax3]]
+                ax1.plot(self.pulse.T_ps, self.pulse.AT.__abs__() ** 2)
+                ax2.plot(self.pulse.F_THz, self.pulse.AW.__abs__() ** 2)
+                ax3.plot(self.pulse.F_THz, np.unwrap(np.arctan2(self.pulse.AW.imag, self.pulse.AW.real)), color='C1')
+                ax2.set_xlim(self.min_sig_fthz / 2, self.max_sig_fthz / 2)
+                fig.suptitle(iter)
+                plt.pause(.1)
 
             s = calculate_spectrogram(self.pulse, self.T_fs)[:, self.ind_pm_fthz]
             error[iter] = np.sqrt(np.sum(abs(s - self.spectrogram_interp) ** 2)) / np.sqrt(
