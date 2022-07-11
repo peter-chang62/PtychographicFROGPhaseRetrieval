@@ -514,21 +514,3 @@ class Retrieval:
         if isinstance(self._pulse_data, fpn.Pulse):
             factor = max(self.pulse.AW.__abs__() ** 2) / max(self.pulse_data.AW.__abs__() ** 2)
             ax[1].plot(self.pulse_data.F_THz, self.pulse_data.AW.__abs__() ** 2 * factor, color='C2')
-
-
-osa = OSA.Data("Data/01-18-2022/SPECTRUM_GRAT_PAIR.CSV", False)
-osa.y = abs(osa.y)
-
-ret = Retrieval()
-
-ret.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
-ret.set_signal_freq(367, 400)
-
-# ret.load_data("Data/01-17-2022/realigned_spectrometer_input.txt")
-# ret.set_signal_freq(284, 620)
-
-ret.correct_for_phase_matching()
-ret.set_initial_guess(1560, 10, 2 ** 12)
-ret.load_spectrum_data(osa.x * 1e-3, osa.y)
-ret.retrieve(0, 250, 70, iter_set=None)
-ret.plot_results()
