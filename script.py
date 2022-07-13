@@ -20,13 +20,15 @@ T_ret = np.arange(50, 500, 5)
 ret.set_initial_guess(1560, 10, 2 ** 12)
 AT = np.zeros((len(T_ret) * 5, len(ret.pulse.AT)), np.complex128)
 
+h = 0
 for n, t in enumerate(T_ret):
     for m in range(5):
         ret.set_initial_guess(1560, 10, 2 ** 12)
         # ret.load_spectrum_data(osa.x * 1e-3, osa.y)
         ret.retrieve(0, t, 70, iter_set=None, plot_update=False)
-        AT[n + m] = ret.pulse.AT
+        AT[h] = ret.pulse.AT
+        h += 1
 
-    print(f'_________________________________{len(T_ret) - n}_________________________________________')
+        print(f'_________________________________{len(AT) - h}_________________________________________')
 
 np.save(f"retrieval_results_Tps_10_NPTS_2xx12.npy", AT)
