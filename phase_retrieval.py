@@ -391,6 +391,11 @@ class Retrieval:
         self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
                                            self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
 
+        # I use self.ind_pm_fthz to set the retrieval's frequency bandwidth. Previously I set the retrieval's
+        # frequency bandwidth to the phase-matching bandwidth (hence the name), but now I want to set it to the
+        # signal frequency bandwidth. I haven't removed the previous line though, since it's not called repeatedly
+        # during retrieval (so it's not a waste of time), and it's a useful way to check that the user has called
+        # self.correct_for_phase_matching
         self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_sig_fthz,
                                            self.pulse.F_THz * 2 <= self.max_sig_fthz).nonzero()[0]
 
