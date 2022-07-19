@@ -391,6 +391,9 @@ class Retrieval:
         self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
                                            self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
 
+        self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_sig_fthz,
+                                           self.pulse.F_THz * 2 <= self.max_sig_fthz).nonzero()[0]
+
         self._intrplt_spctrgrm_to_sim_grid()
 
         ind_start = np.argmin(abs(self.T_fs - start_time))

@@ -13,7 +13,7 @@ osa.y = abs(osa.y)
 # %% ___________________________________________________________________________________________________________________
 ret = pr.Retrieval()
 ret.load_data("Data/01-24-2022/spctgm_grat_pair_output_better_aligned_2.txt")
-ret.set_signal_freq(367, 400)
+ret.set_signal_freq(364, 413)
 ret.correct_for_phase_matching()
 
 T_ret = np.arange(50, 500, 5)
