@@ -146,8 +146,8 @@ def load_data(path):
     # no alteration to the data besides truncation along the time-axis to center T0 is done here
 
     spectrogram = np.genfromtxt(path)
-    T_fs = spectrogram[:, 0][1:]  # time is on the row
-    wl_nm = spectrogram[0][1:]  # wavelength is on the column
+    T_fs = spectrogram[:, 0][1:]  # time is on the column
+    wl_nm = spectrogram[0][1:]  # wavelength is on the row
     F_THz = sc.c * 1e-12 / (wl_nm * 1e-9)  # experimental frequency axis from wl_nm
     spectrogram = spectrogram[1:, 1:]
 
