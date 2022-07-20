@@ -388,8 +388,8 @@ class Retrieval:
 
         assert (iter_set is None) or (isinstance(self.pulse_data, fpn.Pulse) and isinstance(iter_set, int))
 
-        self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
-                                           self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
+        # self._ind_pm_fthz = np.logical_and(self.pulse.F_THz * 2 >= self.min_pm_fthz,
+        #                                    self.pulse.F_THz * 2 <= self.max_pm_fthz).nonzero()[0]
 
         # I use self.ind_pm_fthz to set the retrieval's frequency bandwidth. Previously I set the retrieval's
         # frequency bandwidth to the phase-matching bandwidth (hence the name), but now I want to set it to the
