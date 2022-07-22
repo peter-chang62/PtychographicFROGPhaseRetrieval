@@ -33,4 +33,7 @@ w1 = 2
 w2 = 3
 Ind3 = np.argmin(abs(Omega - w1))
 Ind4 = np.argmin(abs(Omega - w2))
-Omega = Omega[Ind4:Ind3]
+Omega = Omega[Ind4:Ind3 + 1]
+S = S[Ind4:Ind3 + 1, :]
+
+# %% ___________________________________________________________________________________________________________________
