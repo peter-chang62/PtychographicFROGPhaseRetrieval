@@ -13,3 +13,24 @@ Wavelength = np.genfromtxt("Data/Nazanins_Data/Wavelength2.txt")
 Omega = 2 * np.pi * 300 / Wavelength
 
 # %% ___________________________________________________________________________________________________________________
+autocorrelation = np.sum(S, 0)
+PeakInd1 = np.argmax(autocorrelation)
+PeakInd2 = len(Delay0) - PeakInd1
+PeakIndVec = [PeakInd1, PeakInd2]
+PeakInd = min(PeakIndVec)
+Which = np.argmin(PeakIndVec)
+
+if Which == 0:
+    raise AssertionError("hello world")
+
+else:
+    Delay = Delay0[len(Delay0) - 2 * (PeakInd - 1) + 1::]
+    S = S[:, len(Delay0) - 2 * (PeakInd - 1) + 1::]
+
+# %% ___________________________________________________________________________________________________________________
+# in reverse, not sure why but whatever
+w1 = 2
+w2 = 3
+Ind3 = np.argmin(abs(Omega - w1))
+Ind4 = np.argmin(abs(Omega - w2))
+Omega = Omega[Ind4:Ind3]
