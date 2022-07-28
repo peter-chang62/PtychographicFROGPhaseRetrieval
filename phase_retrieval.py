@@ -486,10 +486,10 @@ class Retrieval:
                 fig.suptitle(iter)
                 plt.pause(.1)
 
-            s = calculate_spectrogram(self.pulse, self.T_fs)[:, self.ind_pm_fthz]
+            s = calculate_spectrogram(self.pulse, self.T_fs)[ind_start:ind_end, self.ind_pm_fthz]
             # error[iter] = np.sqrt(np.sum(abs(s - self.spectrogram_interp) ** 2)) / np.sqrt(
             #     np.sum(abs(self.spectrogram_interp) ** 2))
-            res = spo.minimize(func, np.array([1]), args=[s, self.spectrogram_interp])
+            res = spo.minimize(func, np.array([1]), args=[s, self.spectrogram_interp[ind_start:ind_end]])
             error[iter] = res.fun
             AT[iter] = self.pulse.AT
 
