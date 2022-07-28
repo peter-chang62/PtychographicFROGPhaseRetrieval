@@ -24,9 +24,9 @@ def makePFROG(Et, Gt, Omega, Delay):
 
 Iter = 500
 Update = 50
-S = np.genfromtxt("Data/Nazanins_Data/201118_with all the GLASS+1more")
+S = np.genfromtxt("../Data/Nazanins_Data/201118_with all the GLASS+1more")
 Delay0 = np.arange(-500, 500 + 2, 2)
-Wavelength = np.genfromtxt("Data/Nazanins_Data/Wavelength2.txt")
+Wavelength = np.genfromtxt("../Data/Nazanins_Data/Wavelength2.txt")
 Omega = 2 * np.pi * 300 / Wavelength
 
 # %% ___________________________________________________________________________________________________________________
@@ -76,7 +76,7 @@ DelayExp = np.linspace(-DelayRange / 2, DelayRange / 2, NDpnts)
 
 # %% ___________________________________________________________________________________________________________________
 # Divide out BBO phase-matching curve
-PMCurve = np.genfromtxt("ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
+PMCurve = np.genfromtxt("../ptych_FROG_Timmers/BBO_50um_PhaseMatchingCurve.txt")
 PMLambda = PMCurve[:, 0]
 PMOmega = 2 * np.pi * 0.3 / PMLambda
 PMEff = PMCurve[:, 1]

@@ -66,9 +66,9 @@ def fun(gamma, args):
 
 
 # ______________________________________________________________________________________________________________________
-spectrogram = np.genfromtxt('Data/Nazanins_Data/201118_with all the GLASS+1more').T
-BBO_pm_curve = np.genfromtxt("Data/Nazanins_Data/BBO_50um_PhaseMatchingCurve.txt")
-wl = np.genfromtxt("Data/Nazanins_Data/Wavelength2.txt")
+spectrogram = np.genfromtxt('../Data/Nazanins_Data/201118_with all the GLASS+1more').T
+BBO_pm_curve = np.genfromtxt("../Data/Nazanins_Data/BBO_50um_PhaseMatchingCurve.txt")
+wl = np.genfromtxt("../Data/Nazanins_Data/Wavelength2.txt")
 T_fs = np.arange(-500, 502, 2)
 omega = 2 * np.pi * sc.c * 1e-15 / (wl * 1e-9)  # rad / fs
 
