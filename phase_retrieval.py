@@ -8,6 +8,7 @@ import pynlo_peter.Fiber_PPLN_NLSE as fpn
 import scipy.integrate as scint
 import scipy.interpolate as spi
 import scipy.constants as sc
+import scipy.optimize as spo
 
 
 def normalize(x):
@@ -160,6 +161,11 @@ def load_data(path):
     T_fs = T_fs[ind - ind_keep: ind + ind_keep]
 
     return wl_nm, F_THz, T_fs, normalize(spectrogram)
+
+
+def func(gamma, args):
+    spctgm, spctgm_exp = args
+    return np.sqrt(np.mean(abs(normalize(spctgm) - gamma * normalize(spctgm_exp)) ** 2))
 
 
 class Retrieval:
@@ -340,6 +346,8 @@ class Retrieval:
         T0 = np.diff(roots[[0, -1]]) * 0.65 / 1.76
         self._pulse = fpn.Pulse(T0_ps=T0 * 1e-3, center_wavelength_nm=center_wavelength_nm,
                                 time_window_ps=time_window_ps, NPTS=NPTS)
+        phase = np.random.uniform(low=0, high=1, size=self.pulse.NPTS) * np.pi / 8
+        self._pulse.set_AT(self._pulse.AT * np.exp(1j * phase))  # random phase
 
     def load_spectrum_data(self, wl_um, spectrum):
         """
@@ -441,6 +449,7 @@ class Retrieval:
                 # Intuitively, the threshold should be set close to the noise floor, which is determined by the
                 # maximum.
                 phi_j[j_excl] = denoise(phi_j[j_excl], 1e-3 * abs(phi_j).max())
+                # phi_j[:] = denoise(phi_j[:], 1e-3 * abs(phi_j).max())  # or not
 
                 psi_jp = ifft(phi_j)
                 corr1 = AT_shift.conj() * (psi_jp - psi_j) / np.max(abs(AT_shift) ** 2)
@@ -478,8 +487,10 @@ class Retrieval:
                 plt.pause(.1)
 
             s = calculate_spectrogram(self.pulse, self.T_fs)[:, self.ind_pm_fthz]
-            error[iter] = np.sqrt(np.sum(abs(s - self.spectrogram_interp) ** 2)) / np.sqrt(
-                np.sum(abs(self.spectrogram_interp) ** 2))
+            # error[iter] = np.sqrt(np.sum(abs(s - self.spectrogram_interp) ** 2)) / np.sqrt(
+            #     np.sum(abs(self.spectrogram_interp) ** 2))
+            res = spo.minimize(func, np.array([1]), args=[s, self.spectrogram_interp])
+            error[iter] = res.fun
             AT[iter] = self.pulse.AT
 
             print(iter, error[iter])
