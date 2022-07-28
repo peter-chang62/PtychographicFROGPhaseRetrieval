@@ -26,7 +26,7 @@ ret.correct_for_phase_matching()
 # %% ___________________________________________________________________________________________________________________
 ret.set_initial_guess(1560, 20, 2 ** 11)
 ret.load_spectrum_data(osa.x * 1e-3, osa.y)
-ret.retrieve(-0, 435, 50, iter_set=None, plot_update=True)
+ret.retrieve(-435, 435, 50, iter_set=None, plot_update=True)
 ret.plot_results()
 
 # %% ___________________________________________________________________________________________________________________
