@@ -361,7 +361,7 @@ class Retrieval:
 
         # when converting dB to linear scale for data taken by the monochromator, sometimes you get negative
         # values at wavelengths where you have no (or very little) power (experimental error)
-        assert np.all(spectrum > 0), "a negative spectrum is not physical"
+        assert np.all(spectrum >= 0), "a negative spectrum is not physical"
 
         pulse_data: fpn.Pulse
         pulse_data = copy.deepcopy(self.pulse)
