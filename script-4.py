@@ -12,21 +12,21 @@ ret = pr.Retrieval()
 ret.load_data("Data/01-17-2022/spectrogram_realigned_spectrometer_input.txt")
 
 # %% ___________________________________________________________________________________________________________________
-# ind_ll, ind_ul = 440, 1590
-# ret.spectrogram[:, :ind_ll] = 0.0
-# ret.spectrogram[:, ind_ul:] = 0.0
+ind_ll, ind_ul = 400, 1803
+ret.spectrogram[:, :ind_ll] = 0.0
+ret.spectrogram[:, ind_ul:] = 0.0
 
 # %% ___________________________________________________________________________________________________________________
 spectrum = np.genfromtxt("Data/01-17-2022/Spectrum_Stitched_Together_wl_nm.txt")
 
 # %% ___________________________________________________________________________________________________________________
-ret.set_signal_freq(290, 632)
+ret.set_signal_freq(290, 650)
 ret.correct_for_phase_matching()
 
 # %% ___________________________________________________________________________________________________________________
-ret.set_initial_guess(1560, 5, 2 ** 12)
+ret.set_initial_guess(1564.8, 5, 2 ** 12)
 ret.load_spectrum_data(spectrum[:, 0] * 1e-3, spectrum[:, 1])
-ret.retrieve(-300, 300, 45, iter_set=None, plot_update=True)
+ret.retrieve(-275, 275, 45, iter_set=None, plot_update=True)
 ret.plot_results()
 
 # %% ___________________________________________________________________________________________________________________
